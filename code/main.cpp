@@ -5,6 +5,105 @@
 
 using std::cout, std::cin, std::getline;
 
+const std::string bigDigits[10] = {
+    "  #######  \n"
+    " ##     ## \n"
+    " ##     ## \n"
+    " ##     ## \n"
+    " ##     ## \n"
+    " ##     ## \n"
+    "  #######  \n",
+
+    "     ##    \n"
+    "   ####    \n"
+    "  ## ##    \n"
+    "     ##    \n"
+    "     ##    \n"
+    "     ##    \n"
+    " ######### \n",
+
+    "  #######  \n"
+    " ##     ## \n"
+    "        ## \n"
+    "  #######  \n"
+    " ##        \n"
+    " ##        \n"
+    " ######### \n",
+
+    "  #######  \n"
+    " ##     ## \n"
+    "        ## \n"
+    "   ######  \n"
+    "        ## \n"
+    " ##     ## \n"
+    "  #######  \n",
+
+    "      ###  \n"
+    "     ####  \n"
+    "    ## ##  \n"
+    "   ##  ##  \n"
+    " ######### \n"
+    "       ##  \n"
+    "       ##  \n",
+
+    " ######### \n"
+    " ##        \n"
+    " ##        \n"
+    "  #######  \n"
+    "        ## \n"
+    " ##     ## \n"
+    "  #######  \n",
+
+    "  #######  \n"
+    " ##     ## \n"
+    " ##        \n"
+    " ########  \n"
+    " ##     ## \n"
+    " ##     ## \n"
+    "  #######  \n",
+
+    " ######### \n"
+    "        ## \n"
+    "       ##  \n"
+    "      ##   \n"
+    "     ##    \n"
+    "    ##     \n"
+    "   ##      \n",
+    
+    "  #######  \n"
+    " ##     ## \n"
+    " ##     ## \n"
+    "  #######  \n"
+    " ##     ## \n"
+    " ##     ## \n"
+    "  #######  \n",
+    
+    "  #######  \n"
+    " ##     ## \n"
+    " ##     ## \n"
+    "  ######## \n"
+    "        ## \n"
+    " ##     ## \n"
+    "  #######  \n"
+};
+
+void fancy_separator(int length){
+    cout << "\n\n\t";
+    for(int i = 0; i < length; i++){
+        cout << "-";
+    }
+    cout << "\n\t";
+    for(int i = 0; i < length; i++){
+        cout << "0";
+    }
+    cout << "\n\t";
+    for(int i = 0; i < length; i++){
+        cout << "-";
+    }
+    cout << "\n";
+}
+
+
 void createTask(TaskManager& tasks) {
     std::string name, description;
     int timeGoal;
@@ -61,23 +160,52 @@ void startTask(TaskManager& tasks) {
     bool paused = false;
     std::chrono::steady_clock::time_point pauseStartTime;
     int pausedSeconds = 0;
-
+    bool first = 1;
     // Start a thread to handle timer display
     std::thread timerThread([&]() {
-        while (running) {
-            if (!paused) {
-                auto currentTime = std::chrono::steady_clock::now();
-                int elapsedSeconds = std::chrono::duration_cast<std::chrono::seconds>(currentTime - startTime).count() - pausedSeconds;
-                int minutes = elapsedSeconds / 60;
-                int seconds = elapsedSeconds % 60;
+    while (running) {
+        if (!paused) {
+            auto currentTime = std::chrono::steady_clock::now();
+            int elapsedSeconds = std::chrono::duration_cast<std::chrono::seconds>(currentTime - startTime).count() - pausedSeconds;
+            int hours = elapsedSeconds / 3600;
+            int minutes = elapsedSeconds / 60;
+            int seconds = elapsedSeconds % 60;
 
-                // Move cursor up and overwrite the timer line
-                cout << "\rElapsed time: " << std::setw(2) << std::setfill('0') << minutes << ":"
-                          << std::setw(2) << std::setfill('0') << seconds << "   " << std::flush;
+            // Convert hours, minutes, and seconds into digits
+            int hourTens = hours / 10;
+            int hourOnes = hours % 10;
+            int minTens = minutes / 10;
+            int minOnes = minutes % 10;
+            int secTens = seconds / 10;
+            int secOnes = seconds % 10;
+
+            if (!first) {
+                // Clear previous display (assume it spans 7 lines)
+                std::cout << "\033[18A"; // Move cursor up 17 lines to overwrite previous output
             }
-            std::this_thread::sleep_for(std::chrono::milliseconds(200)); // Shorter interval for responsiveness
+
+            fancy_separator(82);
+            cout << "\n";
+            // Display the timer using bigDigits
+            for (int line = 0; line < 7; ++line) { // Assuming each big digit has 7 lines
+                std::cout << "\t" << bigDigits[hourTens].substr(line * 12, 11) << "  "  // Tens of hours
+                          << bigDigits[hourOnes].substr(line * 12, 11)  // Ones of hours
+                          << "  :  "  // Separator
+                          << bigDigits[minTens].substr(line * 12, 11) << "  "  // Tens of minutes
+                          << bigDigits[minOnes].substr(line * 12, 11)  // Ones of minutes
+                          << "  :  "  // Separator
+                          << bigDigits[secTens].substr(line * 12, 11) << "  "  // Tens of seconds
+                          << bigDigits[secOnes].substr(line * 12, 11) << "\n"; // Ones of seconds
+            }
+
+            fancy_separator(82);
+
+            first = 0;
+            std::cout.flush();
         }
-    });
+        std::this_thread::sleep_for(std::chrono::milliseconds(1000)); // Update every second
+    }
+});
 
     while (running) {
         char command;
@@ -101,6 +229,7 @@ void startTask(TaskManager& tasks) {
                     auto pauseEndTime = std::chrono::steady_clock::now();
                     pausedSeconds += std::chrono::duration_cast<std::chrono::seconds>(pauseEndTime - pauseStartTime).count();
                     cout << "\nTimer continued. Press [P] to pause or [X] to stop.\n";
+                    std::cout << "\033[6A\033[0J";
                 }
                 break;
 
@@ -167,5 +296,3 @@ int main() {
 
     return 0;
 }
-
-//test 2
