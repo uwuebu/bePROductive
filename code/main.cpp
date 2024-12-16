@@ -1,72 +1,57 @@
-#include <iostream>
-#include <vector>
-#include <string>
+#include "task.hpp"
 #include <chrono>
-#include <thread> // For sleep
-#include <iomanip> // For formatting output
-#include <nlohmann/json.hpp>
+#include <thread>
+#include <iomanip>
 
-struct Task {
-    std::string name;
-    std::string description;
-    int timeGoalMinutes;
-    int timeCompletedMinutes = 0;
+using std::cout, std::cin, std::getline;
 
-    Task(const std::string& taskName, const std::string& taskDescription, int timeGoal)
-        : name(taskName), description(taskDescription), timeGoalMinutes(timeGoal) {}
-};
-
-void createTask(std::vector<Task>& tasks) {
+void createTask(TaskManager& tasks) {
     std::string name, description;
     int timeGoal;
 
-    std::cout << "Enter task name: ";
-    std::getline(std::cin, name);
+    cout << "Enter task name: "; getline(cin, name);
+    cout << "Enter task description: "; getline(cin, description);
+    cout << "Enter time goal (in minutes): "; cin >> timeGoal;
 
-    std::cout << "Enter task description: ";
-    std::getline(std::cin, description);
+    tasks.add_task(name, description, timeGoal);
 
-    std::cout << "Enter time goal (in minutes): ";
-    std::cin >> timeGoal;
-
-    tasks.emplace_back(name, description, timeGoal);
-
-    std::cout << "Task created successfully!\n";
+    cout << "Task created successfully!\n";
 }
 
-void showTasks(const std::vector<Task>& tasks) {
+void showTasks(TaskManager& tasks) {
     if (tasks.empty()) {
-        std::cout << "No tasks available.\n";
+        cout << "No tasks available.\n";
         return;
     }
 
     for (size_t i = 0; i < tasks.size(); ++i) {
-        std::cout << i + 1 << ". Name: " << tasks[i].name << "\n"
-                  << "   Description: " << tasks[i].description << "\n"
-                  << "   Time Goal: " << tasks[i].timeGoalMinutes << " minutes\n"
-                  << "   Time Completed: " << tasks[i].timeCompletedMinutes << " minutes\n\n";
+        auto task = tasks.get_task_data(i+1);
+        cout << i + 1 << ". Name: " << task.name << "\n"
+                  << "   Description: " << task.description << "\n"
+                  << "   Time Goal: " << task.timeGoalMinutes << " minutes\n"
+                  << "   Time Completed: " << task.timeCompletedMinutes << " minutes\n\n";
     }
 }
 
-void startTask(std::vector<Task>& tasks) {
+void startTask(TaskManager& tasks) {
     if (tasks.empty()) {
-        std::cout << "No tasks available to start.\n";
+        cout << "No tasks available to start.\n";
         return;
     }
 
     showTasks(tasks);
 
     size_t taskIndex;
-    std::cout << "Enter the task number to start: ";
-    std::cin >> taskIndex;
-    std::cin.ignore();
+    cout << "Enter the task number to start: ";
+    cin >> taskIndex;
+    cin.ignore();
 
     if (taskIndex < 1 || taskIndex > tasks.size()) {
-        std::cout << "Invalid task number.\n";
+        cout << "Invalid task number.\n";
         return;
     }
 
-    Task& task = tasks[taskIndex - 1];
+    auto task = tasks.get_task_data(taskIndex);
 
     std::cout << "Starting task: " << task.name << "\n"
               << "Controls: [P] Pause, [C] Continue, [X] Stop\n";
@@ -87,7 +72,7 @@ void startTask(std::vector<Task>& tasks) {
                 int seconds = elapsedSeconds % 60;
 
                 // Move cursor up and overwrite the timer line
-                std::cout << "\rElapsed time: " << std::setw(2) << std::setfill('0') << minutes << ":"
+                cout << "\rElapsed time: " << std::setw(2) << std::setfill('0') << minutes << ":"
                           << std::setw(2) << std::setfill('0') << seconds << "   " << std::flush;
             }
             std::this_thread::sleep_for(std::chrono::milliseconds(200)); // Shorter interval for responsiveness
@@ -96,8 +81,8 @@ void startTask(std::vector<Task>& tasks) {
 
     while (running) {
         char command;
-        std::cin >> command;
-        std::cin.ignore();
+        cin >> command;
+        cin.ignore();
 
         switch (command) {
             case 'P':
@@ -105,7 +90,7 @@ void startTask(std::vector<Task>& tasks) {
                 if (!paused) {
                     paused = true;
                     pauseStartTime = std::chrono::steady_clock::now();
-                    std::cout << "\nTimer paused. Press [C] to continue or [X] to stop.\n";
+                    cout << "\nTimer paused. Press [C] to continue or [X] to stop.\n";
                 }
                 break;
 
@@ -115,7 +100,7 @@ void startTask(std::vector<Task>& tasks) {
                     paused = false;
                     auto pauseEndTime = std::chrono::steady_clock::now();
                     pausedSeconds += std::chrono::duration_cast<std::chrono::seconds>(pauseEndTime - pauseStartTime).count();
-                    std::cout << "\nTimer continued. Press [P] to pause or [X] to stop.\n";
+                    cout << "\nTimer continued. Press [P] to pause or [X] to stop.\n";
                 }
                 break;
 
@@ -136,17 +121,26 @@ void startTask(std::vector<Task>& tasks) {
     elapsedMinutes -= pausedSeconds / 60;
 
     task.timeCompletedMinutes += elapsedMinutes;
+    tasks.change_task_data(taskIndex, task.name, task.description, task.timeGoalMinutes, task.timeCompletedMinutes);
 
     std::cout << "\nTask stopped. Time added: " << elapsedMinutes << " minutes.\n";
 }
 
+void deleteTask(TaskManager& tasks){
+    showTasks(tasks);    
+    size_t taskIndex;
+    cout << "\nEnter task number to delete:\n";
+    cin >> taskIndex;
+    cin.ignore();
+    tasks.delete_task(taskIndex);
+}
 
 int main() {
-    std::vector<Task> taskList;
+    TaskManager taskList;
 
     char choice;
     do {
-        std::cout << "\nMenu:\n1. Create Task\n2. Show Tasks\n3. Start Task\n4. Exit\nEnter your choice: ";
+        std::cout << "\nMenu:\n1. Create Task\n2. Show Tasks\n3. Start Task\n4. Delete task\n5. Exit\nEnter your choice: ";
         std::cin >> choice;
         std::cin.ignore(); // Ignore leftover newline
 
@@ -161,12 +155,15 @@ int main() {
                 startTask(taskList);
                 break;
             case '4':
+                deleteTask(taskList);
+                break;
+            case '5':
                 std::cout << "Exiting...\n";
                 break;
             default:
                 std::cout << "Invalid choice. Please try again.\n";
         }
-    } while (choice != '4');
+    } while (choice != '5');
 
     return 0;
 }
