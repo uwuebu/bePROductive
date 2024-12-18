@@ -10,6 +10,7 @@ Planning to create an app to keep track of planned task and how much time has be
  * be able to create a shedule for a day and be able to set notifications to remind on specified time;
  * be able to start performing the task, to start a timer, pause, continue and stop;
  * be able to add comments on every instance of task performed.
+ * be able to do analysis of data (time spent on tasks in graphs maybe and productivity grade, etc.)
   App will be developed using C++ and for interface OpenGL, on PC at least.
 
 # Possible features
