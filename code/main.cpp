@@ -261,8 +261,83 @@ void deleteTask(TaskManager& tasks){
     tasks.delete_task(taskID);
 }
 
-void currentDayProgress(TaskManager& tasks, Database& database){
+void display_current_day_info(Database& db, TaskManager& taskManager) {
+    // Get current date
+    string currentDate = get_current_date();
 
+    // Fetch data for the current day
+    json currentDayData = db.get_current_day_data();
+
+    // Check if there are any entries for the current day
+    if (currentDayData.empty()) {
+        std::cout << "No data for the current day: " << currentDate << "\n";
+        return;
+    }
+
+    // Calculate overall hours spent
+    int totalMinutes = 0;
+    for (const auto& session : currentDayData["sessions"]) {
+        totalMinutes += session.at("timeSpent").get<int>();
+    }
+
+    // Display overall hours spent
+    std::cout << "Date: " << currentDate << "\n";
+    std::cout << "Overall Hours Spent: " << totalMinutes / 60 << "h " 
+              << totalMinutes % 60 << "m\n\n";
+
+    // Display table of hours spent on each task with name and goal
+    std::map<int, int> taskTimeMap;
+    for (const auto& session : currentDayData["sessions"]) {
+        taskTimeMap[session.at("taskID")] += session.at("timeSpent").get<int>();
+    }
+
+    std::cout << "Hours Spent on Individual Tasks:\n";
+    std::cout << "---------------------------------------------------------------\n";
+    std::cout << "Task ID | Task Name        | Time Goal | Time Spent\n";
+    std::cout << "--------|------------------|-----------|-----------\n";
+    for (const auto& [taskID, timeSpent] : taskTimeMap) {
+        try {
+            const auto& task = taskManager.get_task_data(taskID);
+            std::cout << taskID << "       | " 
+                      << task.name << " | " 
+                      << task.timeGoalMinutes / 60 << "h "
+                      << task.timeGoalMinutes % 60 << "m | " 
+                      << timeSpent / 60 << "h "
+                      << timeSpent % 60 << "m\n";
+        } catch (const std::out_of_range&) {
+            std::cout << taskID << "       | [Task not found] | N/A       | " 
+                      << timeSpent / 60 << "h "
+                      << timeSpent % 60 << "m\n";
+        }
+    }
+    std::cout << "\n";
+
+    // Display table of sessions
+    std::cout << "Task Sessions:\n";
+    std::cout << "-----------------------------------------------------------------------------\n";
+    std::cout << "Task ID | Task Name        | Start Time | End Time   | Pause Time | Time Spent\n";
+    std::cout << "--------|------------------|------------|------------|------------|-----------\n";
+    for (const auto& session : currentDayData["sessions"]) {
+        try {
+            const auto& task = taskManager.get_task_data(session["taskID"]);
+            std::cout << session["taskID"] << "       | "
+                      << task.name << " | "
+                      << session.at("startTime").get<string>() << " | "
+                      << session.at("endTime").get<string>() << " | "
+                      << session.at("pauseTime").get<int>() / 60 << "h "
+                      << session.at("pauseTime").get<int>() % 60 << "m | "
+                      << session.at("timeSpent").get<int>() / 60 << "h "
+                      << session.at("timeSpent").get<int>() % 60 << "m\n";
+        } catch (const std::out_of_range&) {
+            std::cout << session["taskID"] << "       | [Task not found] | " 
+                      << session.at("startTime").get<string>() << " | "
+                      << session.at("endTime").get<string>() << " | "
+                      << session.at("pauseTime").get<int>() / 60 << "h "
+                      << session.at("pauseTime").get<int>() % 60 << "m | "
+                      << session.at("timeSpent").get<int>() / 60 << "h "
+                      << session.at("timeSpent").get<int>() % 60 << "m\n";
+        }
+    }
 }
 
 int main() {
@@ -271,7 +346,7 @@ int main() {
 
     char choice;
     do {
-        std::cout << "\nMenu:\n1. Create Task\n2. Show Tasks\n3. Start Task\n4. Delete task\n5. Exit\nEnter your choice: ";
+        std::cout << "\nMenu:\n1. Create Task\n2. Show Tasks\n3. Start Task\n4. Delete task\n5. Display Info for current day\n6. Exit\nEnter your choice: ";
         std::cin >> choice;
         std::cin.ignore(); // Ignore leftover newline
 
@@ -289,12 +364,15 @@ int main() {
                 deleteTask(taskList);
                 break;
             case '5':
+                display_current_day_info(database, taskList);
+                break;
+            case '6':
                 std::cout << "Exiting...\n";
                 break;
             default:
                 std::cout << "Invalid choice. Please try again.\n";
         }
-    } while (choice != '5');
+    } while (choice != '6');
 
     return 0;
 }
