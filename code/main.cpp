@@ -1,7 +1,5 @@
 #include "task.hpp"
-#include <chrono>
 #include <thread>
-#include <iomanip>
 
 using std::cout, std::cin, std::getline;
 
@@ -117,22 +115,24 @@ void createTask(TaskManager& tasks) {
     cout << "Task created successfully!\n";
 }
 
-void showTasks(TaskManager& tasks) {
-    if (tasks.empty()) {
-        cout << "No tasks available.\n";
+void showTasks(TaskManager& taskManager) {
+    if (taskManager.empty()) { // Check if there are no tasks
+        std::cout << "No tasks available.\n";
         return;
     }
 
-    for (size_t i = 0; i < tasks.size(); ++i) {
-        auto task = tasks.get_task_data(i+1);
-        cout << i + 1 << ". Name: " << task.name << "\n"
+    std::cout << "List of tasks:\n";
+
+    for (const auto& task : taskManager.get_all_tasks()) { // Iterate through all tasks
+        std::cout << "   Task ID: " << task.taskID << "\n"
+                  << "   Name: " << task.name << "\n"
                   << "   Description: " << task.description << "\n"
                   << "   Time Goal: " << task.timeGoalMinutes << " minutes\n"
                   << "   Time Completed: " << task.timeCompletedMinutes << " minutes\n\n";
     }
 }
 
-void startTask(TaskManager& tasks) {
+void startTask(TaskManager& tasks, Database& database) {
     if (tasks.empty()) {
         cout << "No tasks available to start.\n";
         return;
@@ -140,17 +140,12 @@ void startTask(TaskManager& tasks) {
 
     showTasks(tasks);
 
-    size_t taskIndex;
-    cout << "Enter the task number to start: ";
-    cin >> taskIndex;
+    size_t taskID;
+    cout << "Enter the task ID to start: ";
+    cin >> taskID;
     cin.ignore();
 
-    if (taskIndex < 1 || taskIndex > tasks.size()) {
-        cout << "Invalid task number.\n";
-        return;
-    }
-
-    auto task = tasks.get_task_data(taskIndex);
+    auto task = tasks.get_task_data(taskID);
 
     std::cout << "Starting task: " << task.name << "\n"
               << "Controls: [P] Pause, [C] Continue, [X] Stop\n";
@@ -163,49 +158,49 @@ void startTask(TaskManager& tasks) {
     bool first = 1;
     // Start a thread to handle timer display
     std::thread timerThread([&]() {
-    while (running) {
-        if (!paused) {
-            auto currentTime = std::chrono::steady_clock::now();
-            int elapsedSeconds = std::chrono::duration_cast<std::chrono::seconds>(currentTime - startTime).count() - pausedSeconds;
-            int hours = elapsedSeconds / 3600;
-            int minutes = elapsedSeconds / 60;
-            int seconds = elapsedSeconds % 60;
+        while (running) {
+            if (!paused) {
+                auto currentTime = std::chrono::steady_clock::now();
+                int elapsedSeconds = std::chrono::duration_cast<std::chrono::seconds>(currentTime - startTime).count() - pausedSeconds;
+                int hours = elapsedSeconds / 3600;
+                int minutes = elapsedSeconds / 60;
+                int seconds = elapsedSeconds % 60;
 
-            // Convert hours, minutes, and seconds into digits
-            int hourTens = hours / 10;
-            int hourOnes = hours % 10;
-            int minTens = minutes / 10;
-            int minOnes = minutes % 10;
-            int secTens = seconds / 10;
-            int secOnes = seconds % 10;
+                // Convert hours, minutes, and seconds into digits
+                int hourTens = hours / 10;
+                int hourOnes = hours % 10;
+                int minTens = minutes / 10;
+                int minOnes = minutes % 10;
+                int secTens = seconds / 10;
+                int secOnes = seconds % 10;
 
-            if (!first) {
-                // Clear previous display (assume it spans 7 lines)
-                std::cout << "\033[18A"; // Move cursor up 17 lines to overwrite previous output
+                if (!first) {
+                    // Clear previous display (assume it spans 7 lines)
+                    std::cout << "\033[18A"; // Move cursor up 17 lines to overwrite previous output
+                }
+
+                fancy_separator(82);
+                cout << "\n";
+                // Display the timer using bigDigits
+                for (int line = 0; line < 7; ++line) { // Assuming each big digit has 7 lines
+                    std::cout << "\t" << bigDigits[hourTens].substr(line * 12, 11) << "  "  // Tens of hours
+                            << bigDigits[hourOnes].substr(line * 12, 11)  // Ones of hours
+                            << "  :  "  // Separator
+                            << bigDigits[minTens].substr(line * 12, 11) << "  "  // Tens of minutes
+                            << bigDigits[minOnes].substr(line * 12, 11)  // Ones of minutes
+                            << "  :  "  // Separator
+                            << bigDigits[secTens].substr(line * 12, 11) << "  "  // Tens of seconds
+                            << bigDigits[secOnes].substr(line * 12, 11) << "\n"; // Ones of seconds
+                }
+
+                fancy_separator(82);
+
+                first = 0;
+                std::cout.flush();
             }
-
-            fancy_separator(82);
-            cout << "\n";
-            // Display the timer using bigDigits
-            for (int line = 0; line < 7; ++line) { // Assuming each big digit has 7 lines
-                std::cout << "\t" << bigDigits[hourTens].substr(line * 12, 11) << "  "  // Tens of hours
-                          << bigDigits[hourOnes].substr(line * 12, 11)  // Ones of hours
-                          << "  :  "  // Separator
-                          << bigDigits[minTens].substr(line * 12, 11) << "  "  // Tens of minutes
-                          << bigDigits[minOnes].substr(line * 12, 11)  // Ones of minutes
-                          << "  :  "  // Separator
-                          << bigDigits[secTens].substr(line * 12, 11) << "  "  // Tens of seconds
-                          << bigDigits[secOnes].substr(line * 12, 11) << "\n"; // Ones of seconds
-            }
-
-            fancy_separator(82);
-
-            first = 0;
-            std::cout.flush();
+            std::this_thread::sleep_for(std::chrono::milliseconds(1000)); // Update every second
         }
-        std::this_thread::sleep_for(std::chrono::milliseconds(1000)); // Update every second
-    }
-});
+    });
 
     while (running) {
         char command;
@@ -250,22 +245,29 @@ void startTask(TaskManager& tasks) {
     elapsedMinutes -= pausedSeconds / 60;
 
     task.timeCompletedMinutes += elapsedMinutes;
-    tasks.change_task_data(taskIndex, task.name, task.description, task.timeGoalMinutes, task.timeCompletedMinutes);
+    tasks.change_task_data(taskID, task.name, task.description, task.timeGoalMinutes, task.timeCompletedMinutes);
+
+    database.add_entry(task.taskID, elapsedMinutes, convert_time_to_string(startTime), convert_time_to_string(endTime), pausedSeconds/60);
 
     std::cout << "\nTask stopped. Time added: " << elapsedMinutes << " minutes.\n";
 }
 
 void deleteTask(TaskManager& tasks){
     showTasks(tasks);    
-    size_t taskIndex;
-    cout << "\nEnter task number to delete:\n";
-    cin >> taskIndex;
+    size_t taskID;
+    cout << "\nEnter task ID to delete:\n";
+    cin >> taskID;
     cin.ignore();
-    tasks.delete_task(taskIndex);
+    tasks.delete_task(taskID);
+}
+
+void currentDayProgress(TaskManager& tasks, Database& database){
+
 }
 
 int main() {
     TaskManager taskList;
+    Database database;
 
     char choice;
     do {
@@ -281,7 +283,7 @@ int main() {
                 showTasks(taskList);
                 break;
             case '3':
-                startTask(taskList);
+                startTask(taskList, database);
                 break;
             case '4':
                 deleteTask(taskList);
