@@ -261,6 +261,37 @@ void deleteTask(TaskManager& tasks){
     tasks.delete_task(taskID);
 }
 
+string format_fixed_width(const string& input, size_t width) {
+    if (input.length() > width) {
+        return input.substr(0, width); // Trim the string if it's too long
+    }
+    return input + std::string(width - input.length(), ' '); // Pad with spaces
+}
+
+std::string generate_progress_bar(int timeSpent, int timeGoal, size_t barWidth = 25) {
+    if (timeGoal == 0) return std::string(barWidth, '-'); // Handle division by zero
+
+    double progress = static_cast<double>(timeSpent) / timeGoal;
+    size_t fullSegments = static_cast<size_t>(progress * barWidth);
+    double fractionalSegment = (progress * barWidth) - fullSegments;
+
+    std::string progressBar;
+
+    // Add filled squares
+    progressBar.append(fullSegments, '#');
+
+    // Add half-filled square if fractionalSegment is significant
+    if (fractionalSegment >= 0.5 && fullSegments < barWidth) {
+        progressBar += '=';
+        ++fullSegments;
+    }
+
+    // Add empty squares
+    progressBar.append(barWidth - fullSegments, '-');
+
+    return progressBar;
+}
+
 void display_current_day_info(Database& db, TaskManager& taskManager) {
     // Get current date
     string currentDate = get_current_date();
@@ -292,22 +323,19 @@ void display_current_day_info(Database& db, TaskManager& taskManager) {
     }
 
     std::cout << "Hours Spent on Individual Tasks:\n";
-    std::cout << "---------------------------------------------------------------\n";
-    std::cout << "Task ID | Task Name        | Time Goal | Time Spent\n";
-    std::cout << "--------|------------------|-----------|-----------\n";
+    std::cout << "--------------------------------------------------------------------------------\n";
+    std::cout << "Task ID | Task Name        | Goal      | Spent     | Progress \n";
+    std::cout << "--------|------------------|-----------|-----------|----------------------------\n";
     for (const auto& [taskID, timeSpent] : taskTimeMap) {
         try {
             const auto& task = taskManager.get_task_data(taskID);
-            std::cout << taskID << "       | " 
-                      << task.name << " | " 
-                      << task.timeGoalMinutes / 60 << "h "
-                      << task.timeGoalMinutes % 60 << "m | " 
-                      << timeSpent / 60 << "h "
-                      << timeSpent % 60 << "m\n";
+            std::cout << format_fixed_width(std::to_string(task.taskID), 7) << " | " 
+                      << format_fixed_width(task.name, 16) << " | " 
+                      << format_fixed_width(std::to_string(task.timeGoalMinutes / 60) + "h " + std::to_string(task.timeGoalMinutes % 60) + "m", 9) << " | "
+                      << format_fixed_width(std::to_string(timeSpent / 60) + "h " + std::to_string(timeSpent % 60) + "m", 9) << " | " 
+                      << "[" << generate_progress_bar(task.timeCompletedMinutes, task.timeGoalMinutes) << "]" << "\n";
         } catch (const std::out_of_range&) {
-            std::cout << taskID << "       | [Task not found] | N/A       | " 
-                      << timeSpent / 60 << "h "
-                      << timeSpent % 60 << "m\n";
+            std::cout << taskID << " -> [Task not found]";
         }
     }
     std::cout << "\n";
@@ -315,29 +343,27 @@ void display_current_day_info(Database& db, TaskManager& taskManager) {
     // Display table of sessions
     std::cout << "Task Sessions:\n";
     std::cout << "-----------------------------------------------------------------------------\n";
-    std::cout << "Task ID | Task Name        | Start Time | End Time   | Pause Time | Time Spent\n";
-    std::cout << "--------|------------------|------------|------------|------------|-----------\n";
-    for (const auto& session : currentDayData["sessions"]) {
+    std::cout << "Task ID | Task Name        | Start     | End       | Pause Time | Time Spent\n";
+    std::cout << "--------|------------------|-----------|-----------|------------|------------\n";
+    // Create a sorted vector of sessions based on taskID
+    std::vector<json> sortedSessions = currentDayData["sessions"].get<std::vector<json>>();
+    std::sort(sortedSessions.begin(), sortedSessions.end(), [](const json& a, const json& b) {
+        return a.at("taskID").get<int>() < b.at("taskID").get<int>();
+    });
+
+    for (const auto& session : sortedSessions) {
         try {
             const auto& task = taskManager.get_task_data(session["taskID"]);
-            std::cout << session["taskID"] << "       | "
-                      << task.name << " | "
-                      << session.at("startTime").get<string>() << " | "
-                      << session.at("endTime").get<string>() << " | "
-                      << session.at("pauseTime").get<int>() / 60 << "h "
-                      << session.at("pauseTime").get<int>() % 60 << "m | "
-                      << session.at("timeSpent").get<int>() / 60 << "h "
-                      << session.at("timeSpent").get<int>() % 60 << "m\n";
+            std::cout << format_fixed_width(std::to_string(session.at("taskID").get<int>()), 7) << " | "
+                    << format_fixed_width(task.name, 16) << " | "
+                    << format_fixed_width(session.at("startTime").get<string>(), 9) << " | "
+                    << format_fixed_width(session.at("endTime").get<string>(), 9) << " | "
+                    << format_fixed_width(std::to_string(session.at("pauseTime").get<int>() / 60) + "h " + std::to_string(session.at("pauseTime").get<int>() % 60) + "m", 10) << " | "
+                    << format_fixed_width(std::to_string(session.at("timeSpent").get<int>() / 60) + "h " + std::to_string(session.at("timeSpent").get<int>() % 60) + "m", 10) << "\n";
         } catch (const std::out_of_range&) {
-            std::cout << session["taskID"] << "       | [Task not found] | " 
-                      << session.at("startTime").get<string>() << " | "
-                      << session.at("endTime").get<string>() << " | "
-                      << session.at("pauseTime").get<int>() / 60 << "h "
-                      << session.at("pauseTime").get<int>() % 60 << "m | "
-                      << session.at("timeSpent").get<int>() / 60 << "h "
-                      << session.at("timeSpent").get<int>() % 60 << "m\n";
-        }
+            std::cout << session["taskID"] << " -> [Task not found]";
     }
+}
 }
 
 int main() {
