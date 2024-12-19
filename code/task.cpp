@@ -67,14 +67,18 @@ void TaskManager::change_task_data(int taskID, string& taskName, string& taskDes
 }
 
 
-void TaskManager::delete_task(int taskID) {
+void TaskManager::delete_task(int taskID, Database& database) {
     auto it = std::find_if(taskList.begin(), taskList.end(), [&](const Task& task) {
         return task.taskID == taskID;
     });
 
     if (it != taskList.end()) {
         taskList.erase(it); // Remove the task from the vector
-        save_to_json();     // Save changes to the file
+
+        // Now, also remove any sessions in the database related to this task
+        database.delete_entry_if_task_exists(taskID);
+
+        save_to_json(); // Save changes to the file
     } else {
         throw std::out_of_range("Task with the given ID not found.");
     }
@@ -206,4 +210,15 @@ json Database::get_day_data(const string& date) {
         }
     }
     return {}; // Return empty JSON object if no data for the current day
+}
+
+void Database::delete_entry_if_task_exists(int taskID) {
+    for (auto it = database.begin(); it != database.end(); ++it) {
+        // Check each session to see if the taskID matches
+        auto& sessions = (*it)["sessions"];
+        sessions.erase(std::remove_if(sessions.begin(), sessions.end(), [&](const json& session) {
+            return session["taskID"] == taskID;
+        }), sessions.end());
+    }
+    save_to_json();
 }

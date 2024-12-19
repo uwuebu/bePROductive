@@ -20,6 +20,8 @@ string get_current_date();
 
 string convert_time_to_string(const std::chrono::steady_clock::time_point& tp);
 
+class Database;
+
 class TaskManager{
     struct Task {
         int taskID;
@@ -46,7 +48,7 @@ class TaskManager{
         return taskList;
     }
     void change_task_data(int taskID, string& taskName, string& taskDescription, int timeGoal, int timeCompleted);
-    void delete_task(int taskID);
+    void delete_task(int taskID, Database& database);
     bool empty(){return taskList.empty();};
     size_t size(){return taskList.size();};
 };
@@ -63,6 +65,7 @@ public:
     }
     void add_entry(int taskID, int timeSpent, const string& startTime, const string& endTime, int pauseTime);
     void delete_entry(const string& date);
+    void delete_entry_if_task_exists(int taskID);
     json get_day_data(const string& date);
 };
 
