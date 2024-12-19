@@ -63,7 +63,7 @@ public:
     }
     void add_entry(int taskID, int timeSpent, const string& startTime, const string& endTime, int pauseTime);
     void delete_entry(const string& date);
-    json get_current_day_data();
+    json get_day_data(const string& date);
 };
 
 #endif // TASK_HPP

@@ -199,10 +199,9 @@ void Database::delete_entry(const string& date) {
     std::cerr << "Warning: Date not found. Nothing to delete.\n";
 }
 
-json Database::get_current_day_data() {
-    string currentDate = get_current_date();
+json Database::get_day_data(const string& date) {
     for (const auto& entry : database) {
-        if (entry["date"] == currentDate) {
+        if (entry["date"] == date) {
             return entry; // Return the JSON entry for the current day
         }
     }

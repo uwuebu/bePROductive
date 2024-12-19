@@ -292,39 +292,36 @@ std::string generate_progress_bar(int timeSpent, int timeGoal, size_t barWidth =
     return progressBar;
 }
 
-void display_current_day_info(Database& db, TaskManager& taskManager) {
-    // Get current date
-    string currentDate = get_current_date();
-
+void display_day_info(Database& db, TaskManager& taskManager, const string& date) {
     // Fetch data for the current day
-    json currentDayData = db.get_current_day_data();
+    json dayData = db.get_day_data(date);
 
     // Check if there are any entries for the current day
-    if (currentDayData.empty()) {
-        std::cout << "No data for the current day: " << currentDate << "\n";
+    if (dayData.empty()) {
+        std::cout << "No data for the date: " << date << "\n";
         return;
     }
 
     // Calculate overall hours spent
     int totalMinutes = 0;
-    for (const auto& session : currentDayData["sessions"]) {
+    for (const auto& session : dayData["sessions"]) {
         totalMinutes += session.at("timeSpent").get<int>();
     }
 
     // Display overall hours spent
-    std::cout << "Date: " << currentDate << "\n";
+    std::cout << "Date: " << date << "\n";
     std::cout << "Overall Hours Spent: " << totalMinutes / 60 << "h " 
               << totalMinutes % 60 << "m\n\n";
 
     // Display table of hours spent on each task with name and goal
     std::map<int, int> taskTimeMap;
-    for (const auto& session : currentDayData["sessions"]) {
+    for (const auto& session : dayData["sessions"]) {
         taskTimeMap[session.at("taskID")] += session.at("timeSpent").get<int>();
     }
 
     std::cout << "Hours Spent on Individual Tasks:\n";
     std::cout << "--------------------------------------------------------------------------------\n";
-    std::cout << "Task ID | Task Name        | Goal      | Spent     | Progress \n";
+    std::cout << "Task ID | Task Name        | Goal      | Spent     | Overall progress \n";
     std::cout << "--------|------------------|-----------|-----------|----------------------------\n";
     for (const auto& [taskID, timeSpent] : taskTimeMap) {
         try {
@@ -346,7 +343,7 @@ void display_current_day_info(Database& db, TaskManager& taskManager) {
     std::cout << "Task ID | Task Name        | Start     | End       | Pause Time | Time Spent\n";
     std::cout << "--------|------------------|-----------|-----------|------------|------------\n";
     // Create a sorted vector of sessions based on taskID
-    std::vector<json> sortedSessions = currentDayData["sessions"].get<std::vector<json>>();
+    std::vector<json> sortedSessions = dayData["sessions"].get<std::vector<json>>();
     std::sort(sortedSessions.begin(), sortedSessions.end(), [](const json& a, const json& b) {
         return a.at("taskID").get<int>() < b.at("taskID").get<int>();
     });
@@ -372,10 +369,10 @@ int main() {
 
     char choice;
     do {
-        std::cout << "\nMenu:\n1. Create Task\n2. Show Tasks\n3. Start Task\n4. Delete task\n5. Display Info for current day\n6. Exit\nEnter your choice: ";
+        std::cout << "\nMenu:\n1. Create Task\n2. Show Tasks\n3. Start Task\n4. Delete task\n5. Display Info for current day\n6. Display info for specific date\n 7. Exit\nEnter your choice: ";
         std::cin >> choice;
         std::cin.ignore(); // Ignore leftover newline
-
+        string dateInput;
         switch (choice) {
             case '1':
                 createTask(taskList);
@@ -390,15 +387,20 @@ int main() {
                 deleteTask(taskList);
                 break;
             case '5':
-                display_current_day_info(database, taskList);
+                display_day_info(database, taskList, get_current_date());
                 break;
             case '6':
+                cout << "Specify the date which you would like to see info on (format: year-month-day, example: 2024-12-19):\n";
+                cin >> dateInput;
+                display_day_info(database, taskList, dateInput);
+                break;
+            case '7':
                 std::cout << "Exiting...\n";
                 break;
             default:
                 std::cout << "Invalid choice. Please try again.\n";
         }
-    } while (choice != '6');
+    } while (choice != '7');
 
     return 0;
 }
