@@ -12,6 +12,21 @@ string get_current_date() {
     return oss.str();
 }
 
+const string get_current_time() {
+    auto now = std::chrono::system_clock::now();
+    auto time_t_now = std::chrono::system_clock::to_time_t(now);
+    auto local_time = *std::localtime(&time_t_now);
+
+    int hours = local_time.tm_hour;
+    int minutes = local_time.tm_min;
+
+    std::ostringstream oss;
+    oss << std::setw(2) << std::setfill('0') << hours << ":"
+        << std::setw(2) << std::setfill('0') << minutes;
+
+    return oss.str();
+}
+
 string convert_time_to_string(const std::chrono::steady_clock::time_point& tp) {
     // Get the duration in seconds since the steady clock started
     auto duration = std::chrono::duration_cast<std::chrono::seconds>(tp.time_since_epoch()).count();

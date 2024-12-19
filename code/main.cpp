@@ -213,6 +213,7 @@ void startTask(TaskManager& tasks, Database& database) {
          << "Controls: [P] Pause, [C] Continue, [X] Stop\n";
 
     auto startTime = std::chrono::steady_clock::now();
+    auto& startTimeSystem = get_current_time(); 
     bool running = true;
     bool paused = false;
     std::chrono::steady_clock::time_point pauseStartTime;
@@ -303,13 +304,14 @@ void startTask(TaskManager& tasks, Database& database) {
     timerThread.join(); // Wait for the timer thread to finish
 
     auto endTime = std::chrono::steady_clock::now();
+    auto& endTimeSystem = get_current_time();
     int elapsedMinutes = std::chrono::duration_cast<std::chrono::minutes>(endTime - startTime).count();
     elapsedMinutes -= pausedSeconds / 60;
 
     task.timeCompletedMinutes += elapsedMinutes;
     tasks.change_task_data(taskID, task.name, task.description, task.timeGoalMinutes, task.timeCompletedMinutes);
 
-    database.add_entry(task.taskID, elapsedMinutes, convert_time_to_string(startTime), convert_time_to_string(endTime), pausedSeconds/60);
+    database.add_entry(task.taskID, elapsedMinutes, startTimeSystem, endTimeSystem, pausedSeconds/60);
 
     cout << "\nTask stopped. Time added: " << elapsedMinutes << " minutes.\n";
 

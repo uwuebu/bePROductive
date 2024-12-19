@@ -17,6 +17,7 @@ using std::string, std::vector, std::pair;
 using json = nlohmann::json;
 
 string get_current_date();
+const string get_current_time();
 
 string convert_time_to_string(const std::chrono::steady_clock::time_point& tp);
 
