@@ -1,18 +1,22 @@
 # Variables
 CXX = g++
-CXXFLAGS = -std=c++17 -Wall -Wextra -pedantic -Iinclude
+CXXFLAGS = -std=c++17 -Wall -Wextra -pedantic -Iinclude -Isqlite  # Include SQLite header directory
 SRC_DIR = code
 BIN_DIR = bin
-SRC = $(SRC_DIR)/main.cpp $(SRC_DIR)/task.cpp
-OBJ = $(BIN_DIR)/main.o $(BIN_DIR)/task.o
+SRC = $(SRC_DIR)/main.cpp
+OBJ = $(BIN_DIR)/main.o
 TARGET = task_tracker.exe
+
+# SQLite specific variables
+SQLITE_LIB_DIR = sqlite  # Directory containing sqlite3.def and sqlite3.dll
+SQLITE_LIB = -lsqlite3   # SQLite library to link against
 
 # Default target
 all: $(BIN_DIR) $(TARGET)
 
 # Rule to build the target
 $(TARGET): $(OBJ)
-	$(CXX) $(CXXFLAGS) -o $(TARGET) $(OBJ) -Inlohmann_json
+	$(CXX) $(CXXFLAGS) -o $(TARGET) $(OBJ) $(SQLITE_LIB) -L$(SQLITE_LIB_DIR)
 
 # Rule to build object files
 $(BIN_DIR)/%.o: $(SRC_DIR)/%.cpp
