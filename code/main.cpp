@@ -15,11 +15,11 @@ void print_intro();
 // Callback function to handle query results
 int callback(void*, int, char**, char**);
 //Function to INSERT data into db
-int create_goal(sqlite3* db, sqlite3_stmt* stmt, int& lines);
+int create_goal(sqlite3* db, sqlite3_stmt* stmt);
 //Function to QUERY the db for all rows and print them
 int print_table_raw(sqlite3* db);
 //goal menu
-void goal_menu(sqlite3* db, sqlite3_stmt* stmt, int& lines);
+void goal_menu(sqlite3* db, sqlite3_stmt* stmt);
 
 int main(){
     sqlite3* db;
@@ -37,15 +37,13 @@ int main(){
     
     char choice;
     do {
-        int lines = 0; //for keeping track of printed lines 
-        cout << "\n\t\033[2mGoals\033[m\033[36m[G]\033[m | \033[2mSchedule\033[m\033[36m[S]\033[m | \033[2mExit\033[m\033[36m[X]\033[m\n > ";
-        lines+=2;
+        cout << " \033[2mGoals\033[m\033[36m[G]\033[m | \033[2mSchedule\033[m\033[36m[S]\033[m | \033[2mExit\033[m\033[36m[X]\033[m\n > ";
         cin >> choice;
         cin.ignore(); // Ignore leftover newline
         switch (choice) {
             case 'G':
             case 'g':
-                goal_menu(db, stmt, lines);
+                goal_menu(db, stmt);
                 break;
             case 'S':
             case 's':
@@ -74,7 +72,7 @@ void print_intro(){
         " # # ###   \033[33m#     #  #  #   #\033[m\033[1m    # # # # #    #  # # # ###\n" <<
         " ##  ###  \033[33m#     #   #  ###\033[m\033[1m       ## ### ###  #  #  #  ###\n" << 
         "\033[4m"<< string(58, ' ') << "\033[m\n" <<
-        " \033[4m\033[94mhttps://github.com/uwuebu/task_tracker\033[m\t" << VERSION << "\n";
+        " \033[4m\033[94mhttps://github.com/uwuebu/task_tracker\033[m\t" << VERSION << "\n\n\033[s";
 }
 
 // Helper function to calculate displayed width
@@ -85,7 +83,7 @@ size_t get_displayed_width(const string& text) {
     return cleanedText.length();
 }
 
-void print_goal(sqlite3* db, int maxWidth, int& lines, int& selectedIndex) {
+void print_goal(sqlite3* db, int maxWidth, int& selectedIndex) {
     sqlite3_stmt* stmt;
     string query = "SELECT taskID, name FROM tasks WHERE parentID IS NULL;";
     int rc = sqlite3_prepare_v2(db, query.c_str(), -1, &stmt, nullptr);
@@ -142,53 +140,49 @@ void print_goal(sqlite3* db, int maxWidth, int& lines, int& selectedIndex) {
         } else {
             cout << currentLine << '\n';
             currentLine = formattedGoal;
-            lines++;
         }
     }
 
     // Print the last line if it exists
     if (!currentLine.empty()) {
         cout << currentLine << '\n';
-        lines++;
     }
 
     cout << " \033[2m<<Previous\033[m\033[36m[P]\033[m "
-        << string(58 - (std::string(" <<Previous[P]  Next[N]>> ").length() + 1), ' ')
+        << string(58 - (std::string(" <<Previous[P] Next[N]>> ").length() + 1), ' ')
         << " \033[2mNext\033[m\033[36m[N]\033[m\033[2m>>\033[m\n"
         << "\033[53m"<< string(58, ' ') << "\033[m\n";
-        lines++;
 }
 
-void goal_menu(sqlite3* db, sqlite3_stmt* stmt, int& lines) {
-    cout << "\033[" << lines << "A\033[0J";
-    lines = 0;
+void goal_menu(sqlite3* db, sqlite3_stmt* stmt) {
+    cout << "\033[u\033[0J";
     char input;
     int selectedIndex = 0;
 
     do {
-        print_goal(db, 58, lines, selectedIndex);
+        print_goal(db, 58, selectedIndex);
         cout <<"\033[4m"<< string(58, ' ') << "\033[m\n"
          << "\033[2m Back\033[m\033[36m[X]\033[m "
         << string(58 - (std::string(" Back[X] Output raw table data[R] ").length() + 1), ' ')
         << " \033[2mOutput raw table data\033[m\033[36m[R]\033[m\n"
         << "Enter what's inside square brackets for navigation:\n > ";
-        lines += 5;
         cin >> input;
 
         switch (input) {
             case 'R':
             case 'r':
+                cout << "\033[u\033[0J";
                 print_table_raw(db);
                 cin.get();
                 cin.ignore();
+                cout << "\033[u\033[0J";
                 break;
 
             case 'G':
             case 'g':
-                cout << "\033[" << lines << "A\033[0J";
-                lines = 0;
-                create_goal(db, stmt, lines);
-                if (lines != 0){ cout << "\033[" << lines << "A\033[0J"; lines = 0;};
+                cout << "\033[u\033[0J";
+                create_goal(db, stmt);
+                cout << "\033[u\033[0J";
                 break;
 
             case 'P':
@@ -210,14 +204,13 @@ void goal_menu(sqlite3* db, sqlite3_stmt* stmt, int& lines) {
                 break;
         }
 
-        cout << "\033[" << lines << "A\033[0J"; // Clear previous output
-        lines = 0;
+        cout << "\033[u\033[0J"; // Clear previous output
     } while (input != 'X' && input != 'x');
-    cout << "\033[" << lines << "A\033[0J";
+    cout << "\033[u\033[0J";
 }
 
 
-int create_goal(sqlite3* db, sqlite3_stmt* stmt, int& lines) {
+int create_goal(sqlite3* db, sqlite3_stmt* stmt) {
     // Prepare an SQL INSERT statement
     string sql = "INSERT INTO tasks (name, description, priority, deadline) VALUES (?, ?, ?, ?);";
 
@@ -234,11 +227,9 @@ int create_goal(sqlite3* db, sqlite3_stmt* stmt, int& lines) {
     // Goal name is mandatory
     cout << "Enter goal name:\n > ";
     std::getline(cin, name);
-    lines+=2;
     if (name.empty()) {
         cout << "\033[1A\033[0J";
         std::cerr << "Goal name cannot be empty.\n";
-        lines--;
         sqlite3_finalize(stmt);
         return -1;
     }
@@ -246,17 +237,14 @@ int create_goal(sqlite3* db, sqlite3_stmt* stmt, int& lines) {
     // Description (optional)
     cout << "Enter description:\n > ";
     std::getline(cin, description);
-    lines+=2;
 
     // Priority (optional)
     cout << "Enter priority (1-5):\n > ";
     std::getline(cin, priority);
-    lines+=2;
 
     // Deadline (optional)
     cout << "Enter deadline (format: YYYY-MM-DD):\n > ";
     std::getline(cin, deadline);
-    lines+=2;
 
     // Bind user input to the prepared statement
     sqlite3_bind_text(stmt, 1, name.c_str(), -1, SQLITE_STATIC); // Name is mandatory
@@ -278,7 +266,6 @@ int create_goal(sqlite3* db, sqlite3_stmt* stmt, int& lines) {
     // Deadline binding
     if (deadline.empty()) {
         sqlite3_bind_null(stmt, 4);
-        lines--;
     } else {
         sqlite3_bind_text(stmt, 4, deadline.c_str(), -1, SQLITE_STATIC);
     }
