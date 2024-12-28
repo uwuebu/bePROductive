@@ -67,28 +67,27 @@ int main(){
 void print_intro(){
     //be PRODUCTIVE ver. ...
     cout << "\n\033[1m" <<
-        "\033[4m                                                          \033[m\n\033[1m" <<
+        "\033[53m"<< string(58, ' ') << "\033[m\n\033[1m" <<
         " #            \033[33m####  ####   ###\033[m\033[1m    #             #        \n" <<
         " #           \033[33m#   # #   # #   #\033[m\033[1m    #                      \n" <<
         " ##  ###    \033[33m####  ####  #   #\033[m\033[1m    ## # # ### ### # # # ###\n" <<
         " # # ###   \033[33m#     #  #  #   #\033[m\033[1m    # # # # #    #  # # # ###\n" <<
         " ##  ###  \033[33m#     #   #  ###\033[m\033[1m       ## ### ###  #  #  #  ###\n" << 
-        "\033[4m                                                          \033[m\n" <<
-        " \033[4m\033[94mhttps://github.com/uwuebu/task_tracker\033[m\t" << VERSION << "\n"
-    ;
+        "\033[4m"<< string(58, ' ') << "\033[m\n" <<
+        " \033[4m\033[94mhttps://github.com/uwuebu/task_tracker\033[m\t" << VERSION << "\n";
 }
 
 // Helper function to calculate displayed width
-size_t get_displayed_width(const std::string& text) {
+size_t get_displayed_width(const string& text) {
     // Remove ANSI escape sequences using regex
     std::regex escapeSeq("\033\\[[0-9;]*m");
-    std::string cleanedText = std::regex_replace(text, escapeSeq, "");
+    string cleanedText = std::regex_replace(text, escapeSeq, "");
     return cleanedText.length();
 }
 
-void print_goal(sqlite3* db, int maxWidth, int& lines, int id = 1) {
+void print_goal(sqlite3* db, int maxWidth, int& lines, int& selectedIndex) {
     sqlite3_stmt* stmt;
-    std::string query = "SELECT * FROM tasks WHERE parentID IS NULL;";
+    string query = "SELECT taskID, name FROM tasks WHERE parentID IS NULL;";
     int rc = sqlite3_prepare_v2(db, query.c_str(), -1, &stmt, nullptr);
 
     if (rc != SQLITE_OK) {
@@ -98,32 +97,40 @@ void print_goal(sqlite3* db, int maxWidth, int& lines, int id = 1) {
 
     struct Goal {
         int id;
-        std::string name;
-        Goal(int p_id, const std::string& p_name)
+        string name;
+        Goal(int p_id, const string& p_name)
             : id(p_id), name(p_name) {}
     };
     std::vector<Goal> goals;
 
     while (sqlite3_step(stmt) == SQLITE_ROW) {
         int goalID = sqlite3_column_int(stmt, 0);
-        const unsigned char* goalName = sqlite3_column_text(stmt, 2);
+        const unsigned char* goalName = sqlite3_column_text(stmt, 1);
 
         if (goalName) {
             goals.emplace_back(goalID, reinterpret_cast<const char*>(goalName));
         }
     }
-    goals.emplace_back(0, "\033[36m[G]\033[m\033[2mAdd new goal\033[m\n");
+
+    goals.emplace_back(0, "\033[36m[G]\033[m\033[2mAdd new goal\033[m");
 
     sqlite3_finalize(stmt);
 
+    // Handle edge cases for selectedIndex
+    if (selectedIndex >= static_cast<int>(goals.size() - 1)) {
+        selectedIndex = goals.size() - 2;
+    } else if (selectedIndex < 0) {
+        selectedIndex = 0;
+    }
+
     // Format output within the maxWidth constraint
-    std::string currentLine;
-    for (Goal& goal : goals) {
-        std::string formattedGoal;
-        if (id == goal.id) {
-            formattedGoal = "\033[7m" + goal.name + "\033[m";
+    string currentLine;
+    for (size_t i = 0; i < goals.size(); ++i) {
+        string formattedGoal;
+        if (static_cast<int>(i) == selectedIndex) {
+            formattedGoal = "\033[7m" + goals[i].name + "\033[m"; // Highlight selected goal
         } else {
-            formattedGoal = goal.name;
+            formattedGoal = goals[i].name;
         }
 
         size_t formattedWidth = get_displayed_width(currentLine) + get_displayed_width(formattedGoal) + 3;
@@ -133,7 +140,7 @@ void print_goal(sqlite3* db, int maxWidth, int& lines, int id = 1) {
         } else if (formattedWidth <= static_cast<size_t>(maxWidth)) {
             currentLine += " | " + formattedGoal;
         } else {
-            std::cout << currentLine << '\n';
+            cout << currentLine << '\n';
             currentLine = formattedGoal;
             lines++;
         }
@@ -141,41 +148,74 @@ void print_goal(sqlite3* db, int maxWidth, int& lines, int id = 1) {
 
     // Print the last line if it exists
     if (!currentLine.empty()) {
-        std::cout << currentLine << '\n';
+        cout << currentLine << '\n';
         lines++;
     }
+
+    cout << " \033[2m<<Previous\033[m\033[36m[P]\033[m "
+        << string(58 - (std::string(" <<Previous[P]  Next[N]>> ").length() + 1), ' ')
+        << " \033[2mNext\033[m\033[36m[N]\033[m\033[2m>>\033[m\n"
+        << "\033[53m"<< string(58, ' ') << "\033[m\n";
+        lines++;
 }
 
-
-void goal_menu(sqlite3* db, sqlite3_stmt* stmt, int& lines){
+void goal_menu(sqlite3* db, sqlite3_stmt* stmt, int& lines) {
     cout << "\033[" << lines << "A\033[0J";
+    lines = 0;
     char input;
-    do{
-        print_goal(db, 58, lines);
-        cout << "\033[2mBack\033[m\033[36m[X]\033[m\t\t\033[2mOutput raw table data\033[m\033[36m[R]\033[m\n" <<
-        "Enter what's inside square brackets for navigation:\n > ";
-        lines+=2;
+    int selectedIndex = 0;
+
+    do {
+        print_goal(db, 58, lines, selectedIndex);
+        cout <<"\033[4m"<< string(58, ' ') << "\033[m\n"
+         << "\033[2m Back\033[m\033[36m[X]\033[m "
+        << string(58 - (std::string(" Back[X] Output raw table data[R] ").length() + 1), ' ')
+        << " \033[2mOutput raw table data\033[m\033[36m[R]\033[m\n"
+        << "Enter what's inside square brackets for navigation:\n > ";
+        lines += 5;
         cin >> input;
-        switch (input){
+
+        switch (input) {
             case 'R':
             case 'r':
                 print_table_raw(db);
+                cin.get();
+                cin.ignore();
                 break;
+
             case 'G':
             case 'g':
                 cout << "\033[" << lines << "A\033[0J";
                 lines = 0;
                 create_goal(db, stmt, lines);
-                if(lines != 0) cout << "\033[" << lines << "A\033[0J";
+                if (lines != 0){ cout << "\033[" << lines << "A\033[0J"; lines = 0;};
                 break;
+
+            case 'P':
+            case 'p':
+                selectedIndex--; // Move to previous goal
+                break;
+
+            case 'N':
+            case 'n':
+                selectedIndex++; // Move to next goal
+                break;
+
             case 'X':
             case 'x':
-                cout << "";
+                break;
+
+            default:
+                cout << "\033[31mInvalid input! Try again.\033[m\n";
                 break;
         }
-    } while(input != 'X' && input != 'x');
+
+        cout << "\033[" << lines << "A\033[0J"; // Clear previous output
+        lines = 0;
+    } while (input != 'X' && input != 'x');
     cout << "\033[" << lines << "A\033[0J";
 }
+
 
 int create_goal(sqlite3* db, sqlite3_stmt* stmt, int& lines) {
     // Prepare an SQL INSERT statement
@@ -192,9 +232,9 @@ int create_goal(sqlite3* db, sqlite3_stmt* stmt, int& lines) {
     string name, description, priority, deadline;
 
     // Goal name is mandatory
-    cout << "Enter goal name:\t";
+    cout << "Enter goal name:\n > ";
     std::getline(cin, name);
-    lines++;
+    lines+=2;
     if (name.empty()) {
         cout << "\033[1A\033[0J";
         std::cerr << "Goal name cannot be empty.\n";
@@ -204,19 +244,19 @@ int create_goal(sqlite3* db, sqlite3_stmt* stmt, int& lines) {
     }
 
     // Description (optional)
-    cout << "Enter description:\t";
+    cout << "Enter description:\n > ";
     std::getline(cin, description);
-    lines++;
+    lines+=2;
 
     // Priority (optional)
-    cout << "Enter priority (1-5):\t";
+    cout << "Enter priority (1-5):\n > ";
     std::getline(cin, priority);
-    lines++;
+    lines+=2;
 
     // Deadline (optional)
-    cout << "Enter deadline (format: YYYY-MM-DD):\t";
+    cout << "Enter deadline (format: YYYY-MM-DD):\n > ";
     std::getline(cin, deadline);
-    lines++;
+    lines+=2;
 
     // Bind user input to the prepared statement
     sqlite3_bind_text(stmt, 1, name.c_str(), -1, SQLITE_STATIC); // Name is mandatory
@@ -238,6 +278,7 @@ int create_goal(sqlite3* db, sqlite3_stmt* stmt, int& lines) {
     // Deadline binding
     if (deadline.empty()) {
         sqlite3_bind_null(stmt, 4);
+        lines--;
     } else {
         sqlite3_bind_text(stmt, 4, deadline.c_str(), -1, SQLITE_STATIC);
     }
@@ -249,9 +290,6 @@ int create_goal(sqlite3* db, sqlite3_stmt* stmt, int& lines) {
         return -1;
     }
 
-    std::cout << "Goal inserted successfully!\n";
-    lines++;
-
     sqlite3_finalize(stmt); // Finalize the statement to release resources
     return 0;
 }
@@ -261,7 +299,7 @@ int create_goal(sqlite3* db, sqlite3_stmt* stmt, int& lines) {
 int print_table_raw(sqlite3* db){
     // Query the table and print results
     const char* data = "Query Results:";
-    std::string selectSQL = "SELECT * FROM tasks;";
+    string selectSQL = "SELECT * FROM tasks;";
     char* errorMessage = nullptr;
 
     int rc = sqlite3_exec(db, selectSQL.c_str(), callback, (void*)data, &errorMessage);
@@ -270,7 +308,7 @@ int print_table_raw(sqlite3* db){
         sqlite3_free(errorMessage);
         return -1;
     } else {
-        std::cout << "Data selected successfully!\n";
+        cout << "Data selected successfully!\n";
     }
     return 0;
 }
@@ -285,7 +323,7 @@ int callback(void* data, int argc, char** argv, char** colName) {
             cout << std::setw(15) << std::left << colName[i];
         }
         cout << "\n";
-        cout << std::string(15 * argc, '-') << "\n"; // Separator line
+        cout << string(15 * argc, '-') << "\n"; // Separator line
         headerPrinted = true;
     }
 
