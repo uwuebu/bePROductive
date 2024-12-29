@@ -1,9 +1,9 @@
-#include <sqlite3.h>
 #include <iostream>
 #include <iomanip>
 #include <string>
 #include <vector>
 #include <regex>
+#include "database.hpp"
 
 #define VERSION "v. 0.0.1/test"
 
@@ -12,38 +12,24 @@ using std::cout, std::cin, std::string;
 int lines_printed = 0;
 
 void print_intro();
-// Callback function to handle query results
-int callback(void*, int, char**, char**);
 //Function to INSERT data into db
-int create_goal(sqlite3* db, sqlite3_stmt* stmt);
-//Function to QUERY the db for all rows and print them
-int print_table_raw(sqlite3* db);
+int create_entry(int parentID = 0);
 //goal menu
-void goal_menu(sqlite3* db, sqlite3_stmt* stmt);
+void goal_menu();
 
 int main(){
-    sqlite3* db;
-    sqlite3_stmt* stmt;
-    char* errorMessage = nullptr;
-    int rc = sqlite3_open("database/taskMdatabase.db", &db);
-    if (rc) {
-        std::cerr << "Error opening database: " << sqlite3_errmsg(db) << '\n';
-        return rc;
-    } else {
-        //cout << "Opened database successfully!\n";
-    }
-    
-    print_intro();
-    
+    Database::initialize_database();
+
     char choice;
     do {
+        print_intro();
         cout << " \033[2mGoals\033[m\033[36m[G]\033[m | \033[2mSchedule\033[m\033[36m[S]\033[m | \033[2mExit\033[m\033[36m[X]\033[m\n > ";
         cin >> choice;
         cin.ignore(); // Ignore leftover newline
         switch (choice) {
             case 'G':
             case 'g':
-                goal_menu(db, stmt);
+                goal_menu();
                 break;
             case 'S':
             case 's':
@@ -58,13 +44,12 @@ int main(){
         }
     } while (choice != 'X' && choice != 'x');
 
-    sqlite3_close(db);
     return 0;
 }
 
 void print_intro(){
     //be PRODUCTIVE ver. ...
-    cout << "\n\033[1m" <<
+    cout << "\033[s\n\033[1m" <<
         "\033[53m"<< string(58, ' ') << "\033[m\n\033[1m" <<
         " #            \033[33m####  ####   ###\033[m\033[1m    #             #        \n" <<
         " #           \033[33m#   # #   # #   #\033[m\033[1m    #                      \n" <<
@@ -72,8 +57,25 @@ void print_intro(){
         " # # ###   \033[33m#     #  #  #   #\033[m\033[1m    # # # # #    #  # # # ###\n" <<
         " ##  ###  \033[33m#     #   #  ###\033[m\033[1m       ## ### ###  #  #  #  ###\n" << 
         "\033[4m"<< string(58, ' ') << "\033[m\n" <<
-        " \033[4m\033[94mhttps://github.com/uwuebu/task_tracker\033[m\t" << VERSION << "\n\n\033[s";
+        " \033[4m\033[94mhttps://github.com/uwuebu/task_tracker\033[m\t" << VERSION << "\n\n";
 }
+
+struct Goal {
+        int id;
+        string name;
+        Goal(int p_id, const string& p_name)
+            : id(p_id), name(p_name) {}
+    };
+
+struct Task {
+    int id;
+    string name;
+    int completion;
+    int level;
+
+    Task(int id, const string& name, int completion, int level)
+        : id(id), name(name), completion(completion), level(level) {}
+};
 
 // Helper function to calculate displayed width
 size_t get_displayed_width(const string& text) {
@@ -83,49 +85,48 @@ size_t get_displayed_width(const string& text) {
     return cleanedText.length();
 }
 
-void print_goal(sqlite3* db, int maxWidth, int& selectedIndex) {
-    sqlite3_stmt* stmt;
-    string query = "SELECT taskID, name FROM tasks WHERE parentID IS NULL;";
-    int rc = sqlite3_prepare_v2(db, query.c_str(), -1, &stmt, nullptr);
+void fetch_tasks(int parentID, int level, std::vector<Task>& tasks) {
+    // Fetch results for the current level
+    auto result = Database::fetch_results("SELECT taskID, name, completion FROM tasks WHERE parentID = " + std::to_string(parentID) + ";");
 
-    if (rc != SQLITE_OK) {
-        std::cerr << "Failed to prepare statement: " << sqlite3_errmsg(db) << '\n';
-        return;
+    for (auto& row : result) {
+        // Parse the row to extract task details
+        int taskID = std::stoi(row[0]);
+        const std::string& taskName = row[1];  // Assuming row[1] contains the task name
+        int completion = std::stoi(row[2]);
+
+        // Add the task to the list
+        tasks.emplace_back(taskID, taskName, completion, level);
+
+        // Recursive call to fetch subtasks
+        fetch_tasks(taskID, level + 1, tasks);
     }
+}
 
-    struct Goal {
-        int id;
-        string name;
-        Goal(int p_id, const string& p_name)
-            : id(p_id), name(p_name) {}
-    };
+
+int print_goal(int maxWidth, int& selectedIndexGoals, int& selectedIndexTasks) {
+    std::vector<std::vector<string>> result = Database::fetch_results("SELECT taskID, name FROM tasks WHERE parentID IS NULL;");
+    
     std::vector<Goal> goals;
 
-    while (sqlite3_step(stmt) == SQLITE_ROW) {
-        int goalID = sqlite3_column_int(stmt, 0);
-        const unsigned char* goalName = sqlite3_column_text(stmt, 1);
-
-        if (goalName) {
-            goals.emplace_back(goalID, reinterpret_cast<const char*>(goalName));
-        }
+    for(auto& row : result){
+        goals.emplace_back(stoi(row[0]), row[1]);
     }
 
     goals.emplace_back(0, "\033[36m[G]\033[m\033[2mAdd new goal\033[m");
 
-    sqlite3_finalize(stmt);
-
     // Handle edge cases for selectedIndex
-    if (selectedIndex >= static_cast<int>(goals.size() - 1)) {
-        selectedIndex = goals.size() - 2;
-    } else if (selectedIndex < 0) {
-        selectedIndex = 0;
+    if (selectedIndexGoals >= static_cast<int>(goals.size() - 1)) {
+        selectedIndexGoals = goals.size() - 2;
+    } else if (selectedIndexGoals < 0) {
+        selectedIndexGoals = 0;
     }
 
     // Format output within the maxWidth constraint
     string currentLine;
     for (size_t i = 0; i < goals.size(); ++i) {
         string formattedGoal;
-        if (static_cast<int>(i) == selectedIndex) {
+        if (static_cast<int>(i) == selectedIndexGoals) {
             formattedGoal = "\033[7m" + goals[i].name + "\033[m"; // Highlight selected goal
         } else {
             formattedGoal = goals[i].name;
@@ -152,47 +153,95 @@ void print_goal(sqlite3* db, int maxWidth, int& selectedIndex) {
         << string(58 - (std::string(" <<Previous[P] Next[N]>> ").length() + 1), ' ')
         << " \033[2mNext\033[m\033[36m[N]\033[m\033[2m>>\033[m\n"
         << "\033[53m"<< string(58, ' ') << "\033[m\n";
+
+    // Tasks part:
+    std::vector<Task> tasks;
+    fetch_tasks(goals[selectedIndexGoals].id, 0, tasks); // Fetch all tasks starting from root
+
+    // Handle edge cases for selectedIndex
+    if (selectedIndexTasks >= static_cast<int>(tasks.size())) {
+        selectedIndexTasks = tasks.size() - 1;
+    } else if (selectedIndexTasks < 0) {
+        selectedIndexTasks = 0;
+    }
+
+    cout << " \033[2m^Up\033[m\033[36m[U]\033[m "
+        << string(58 - (std::string(" ^Up[U] Select task[S] Delete task[K] ").length() + 1), ' ')
+        << " \033[2mSelect task\033[m\033[36m[S]\033[m \033[2mDelete task\033[m\033[36m[K]\033[m\n";
+
+    for (size_t i = 0; i < tasks.size(); ++i) {
+        const Task& task = tasks[i];
+        string taskName = string(task.level*4, ' ') + task.name;
+
+
+        // Highlight selected task
+        if (static_cast<int>(i) == selectedIndexTasks) {
+            taskName = "\033[7m" + taskName + "\033[m";
+        }
+
+        // Ensure taskName fits within maxWidth
+        size_t displayedWidth = get_displayed_width(taskName);
+        if (displayedWidth < static_cast<size_t>(maxWidth)) {
+            taskName += string(maxWidth - displayedWidth, '.');
+        } else if (displayedWidth > static_cast<size_t>(maxWidth)) {
+            taskName = taskName.substr(0, maxWidth - 3) + "...";
+        }
+
+        cout << taskName << '\n';
+    }
+    cout << "\033[2m v Down\033[m\033[36m[D]\033[m\n";
+    cout << "\033[2m Add new task\033[m\033[36m[T]\033[m\n";
+
+    return goals[selectedIndexGoals].id;
 }
 
-void goal_menu(sqlite3* db, sqlite3_stmt* stmt) {
+void goal_menu() {
     cout << "\033[u\033[0J";
     char input;
-    int selectedIndex = 0;
+    int selectedIndexGoals = 0;
+    int selectedIndexTasks = 0;
 
     do {
-        print_goal(db, 58, selectedIndex);
+        cout << "\033[53m"<< string(58, ' ') << "\033[m\n";
+        int goalID = print_goal(58, selectedIndexGoals, selectedIndexTasks);
         cout <<"\033[4m"<< string(58, ' ') << "\033[m\n"
-         << "\033[2m Back\033[m\033[36m[X]\033[m "
-        << string(58 - (std::string(" Back[X] Output raw table data[R] ").length() + 1), ' ')
-        << " \033[2mOutput raw table data\033[m\033[36m[R]\033[m\n"
+         << "\033[2m Back\033[m\033[36m[X]\033[m\n"
         << "Enter what's inside square brackets for navigation:\n > ";
         cin >> input;
 
         switch (input) {
-            case 'R':
-            case 'r':
-                cout << "\033[u\033[0J";
-                print_table_raw(db);
-                cin.get();
-                cin.ignore();
-                cout << "\033[u\033[0J";
-                break;
-
             case 'G':
             case 'g':
                 cout << "\033[u\033[0J";
-                create_goal(db, stmt);
+                create_entry();
                 cout << "\033[u\033[0J";
                 break;
 
             case 'P':
             case 'p':
-                selectedIndex--; // Move to previous goal
+                selectedIndexGoals--; // Move to previous goal
                 break;
 
             case 'N':
             case 'n':
-                selectedIndex++; // Move to next goal
+                selectedIndexGoals++; // Move to next goal
+                break;
+
+            case 'T':
+            case 't':
+                cout << "\033[u\033[0J";
+                create_entry(goalID);
+                cout << "\033[u\033[0J";
+                break;
+            
+            case 'U':
+            case 'u':
+                selectedIndexTasks--;
+                break;
+            
+            case 'D':
+            case 'd':
+                selectedIndexTasks++;
                 break;
 
             case 'X':
@@ -210,115 +259,53 @@ void goal_menu(sqlite3* db, sqlite3_stmt* stmt) {
 }
 
 
-int create_goal(sqlite3* db, sqlite3_stmt* stmt) {
-    // Prepare an SQL INSERT statement
-    string sql = "INSERT INTO tasks (name, description, priority, deadline) VALUES (?, ?, ?, ?);";
-
-    if (sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, nullptr) != SQLITE_OK) {
-        std::cerr << "Failed to prepare statement: " << sqlite3_errmsg(db) << std::endl;
-        sqlite3_close(db);
-        return -1;
-    }
-
+int create_entry(int parentID) {
     cin.ignore();
-    // Get user input
-    string name, description, priority, deadline;
 
-    // Goal name is mandatory
-    cout << "Enter goal name:\n > ";
-    std::getline(cin, name);
+    // Collect user input
+    std::string name, description, priority, deadline;
+
+    // Name is mandatory
+    std::cout << "Enter name:\n > ";
+    std::getline(std::cin, name);
     if (name.empty()) {
-        cout << "\033[1A\033[0J";
         std::cerr << "Goal name cannot be empty.\n";
-        sqlite3_finalize(stmt);
         return -1;
     }
 
-    // Description (optional)
-    cout << "Enter description:\n > ";
-    std::getline(cin, description);
+    // Optional fields
+    std::cout << "Enter description:\n > ";
+    std::getline(std::cin, description);
 
-    // Priority (optional)
-    cout << "Enter priority (1-5):\n > ";
-    std::getline(cin, priority);
+    std::cout << "Enter priority (1-5):\n > ";
+    std::getline(std::cin, priority);
 
-    // Deadline (optional)
-    cout << "Enter deadline (format: YYYY-MM-DD):\n > ";
-    std::getline(cin, deadline);
+    std::cout << "Enter deadline (format: YYYY-MM-DD):\n > ";
+    std::getline(std::cin, deadline);
 
-    // Bind user input to the prepared statement
-    sqlite3_bind_text(stmt, 1, name.c_str(), -1, SQLITE_STATIC); // Name is mandatory
+    // Prepare data for insertion
+    std::vector<std::variant<std::string, int, std::nullptr_t>> data;
 
-    // Description binding
-    if (description.empty()) {
-        sqlite3_bind_null(stmt, 2);
-    } else {
-        sqlite3_bind_text(stmt, 2, description.c_str(), -1, SQLITE_STATIC);
-    }
+    data.push_back(name); // Mandatory name
 
-    // Priority binding
-    if (priority.empty()) {
-        sqlite3_bind_null(stmt, 3);
-    } else {
-        sqlite3_bind_text(stmt, 3, priority.c_str(), -1, SQLITE_STATIC);
-    }
+    data.push_back(parentID == 0 
+    ? std::variant<std::string, int, std::nullptr_t>(nullptr) 
+    : std::variant<std::string, int, std::nullptr_t>(parentID));
+    data.push_back(description.empty()
+    ? std::variant<std::string, int, std::nullptr_t>(nullptr)  
+    : std::variant<std::string, int, std::nullptr_t>(description)); // Description
+    data.push_back(priority.empty() 
+    ? std::variant<std::string, int, std::nullptr_t>(nullptr)  
+    : std::variant<std::string, int, std::nullptr_t>(priority)); // Priority
+    data.push_back(deadline.empty() 
+    ? std::variant<std::string, int, std::nullptr_t>(nullptr)  
+    : std::variant<std::string, int, std::nullptr_t>(deadline)); // Deadline
 
-    // Deadline binding
-    if (deadline.empty()) {
-        sqlite3_bind_null(stmt, 4);
-    } else {
-        sqlite3_bind_text(stmt, 4, deadline.c_str(), -1, SQLITE_STATIC);
-    }
-
-    // Execute the statement
-    if (sqlite3_step(stmt) != SQLITE_DONE) {
-        std::cerr << "Error inserting data: " << sqlite3_errmsg(db) << std::endl;
-        sqlite3_finalize(stmt);
+    // Insert data using the Database class
+    std::string sql = "INSERT INTO tasks (name, parentID, description, priority, deadline) VALUES (?, ?, ?, ?, ?);";
+    if (Database::insert_data(sql, data) != 0) {
         return -1;
     }
-
-    sqlite3_finalize(stmt); // Finalize the statement to release resources
-    return 0;
-}
-
-
-
-int print_table_raw(sqlite3* db){
-    // Query the table and print results
-    const char* data = "Query Results:";
-    string selectSQL = "SELECT * FROM tasks;";
-    char* errorMessage = nullptr;
-
-    int rc = sqlite3_exec(db, selectSQL.c_str(), callback, (void*)data, &errorMessage);
-    if (rc != SQLITE_OK) {
-        std::cerr << "Error selecting data: " << errorMessage << std::endl;
-        sqlite3_free(errorMessage);
-        return -1;
-    } else {
-        cout << "Data selected successfully!\n";
-    }
-    return 0;
-}
-
-int callback(void* data, int argc, char** argv, char** colName) {
-    static bool headerPrinted = false;
-
-    if (!headerPrinted) {
-        cout << (const char*)data << "\n";
-        // Print column names as table header
-        for (int i = 0; i < argc; i++) {
-            cout << std::setw(15) << std::left << colName[i];
-        }
-        cout << "\n";
-        cout << string(15 * argc, '-') << "\n"; // Separator line
-        headerPrinted = true;
-    }
-
-    // Print row data
-    for (int i = 0; i < argc; i++) {
-        cout << std::setw(15) << std::left << (argv[i] ? argv[i] : "NULL");
-    }
-    cout << "\n";
 
     return 0;
 }
