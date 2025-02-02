@@ -1,445 +1,909 @@
-#include "task.hpp"
+#include <iostream>
+#include <iomanip>
+#include <string>
+#include <vector>
+#include <chrono>
+#include <regex>
+#include "database.hpp"
 #include <thread>
 
-using std::cout, std::cin, std::getline;
+#define LINK "https://github.com/uwuebu/task_tracker"
+#define VERSION "v. 0.0.1/test"
 
-const string bigDigits[10] = {
-    "  #######  \n"
-    " ##     ## \n"
-    " ##     ## \n"
-    " ##     ## \n"
-    " ##     ## \n"
-    " ##     ## \n"
-    "  #######  \n",
+#define MAXWIDTH 58
 
-    "     ##    \n"
-    "   ####    \n"
-    "  ## ##    \n"
-    "     ##    \n"
-    "     ##    \n"
-    "     ##    \n"
-    " ######### \n",
+using std::cout, std::cin, std::string;
 
-    "  #######  \n"
-    " ##     ## \n"
-    "        ## \n"
-    "  #######  \n"
-    " ##        \n"
-    " ##        \n"
-    " ######### \n",
+void print_intro();
+//Function to INSERT data into db
+int create_entry(int parentID = 0);
+//Function to delete task entry from daatabase
+void delete_entry(int ID, const string& name);
+//Menu to navigate projects and select tasks
+void project_menu();
+//Menu to see details about specific tasks
+void task_menu(int ID);
 
-    "  #######  \n"
-    " ##     ## \n"
-    "        ## \n"
-    "   ######  \n"
-    "        ## \n"
-    " ##     ## \n"
-    "  #######  \n",
+int main(){
+    Database::initialize_database();
 
-    "      ###  \n"
-    "     ####  \n"
-    "    ## ##  \n"
-    "   ##  ##  \n"
-    " ######### \n"
-    "       ##  \n"
-    "       ##  \n",
-
-    " ######### \n"
-    " ##        \n"
-    " ##        \n"
-    "  #######  \n"
-    "        ## \n"
-    " ##     ## \n"
-    "  #######  \n",
-
-    "  #######  \n"
-    " ##     ## \n"
-    " ##        \n"
-    " ########  \n"
-    " ##     ## \n"
-    " ##     ## \n"
-    "  #######  \n",
-
-    " ######### \n"
-    "        ## \n"
-    "       ##  \n"
-    "      ##   \n"
-    "     ##    \n"
-    "    ##     \n"
-    "   ##      \n",
-    
-    "  #######  \n"
-    " ##     ## \n"
-    " ##     ## \n"
-    "  #######  \n"
-    " ##     ## \n"
-    " ##     ## \n"
-    "  #######  \n",
-    
-    "  #######  \n"
-    " ##     ## \n"
-    " ##     ## \n"
-    "  ######## \n"
-    "        ## \n"
-    " ##     ## \n"
-    "  #######  \n"
-};
-
-void fancy_separator(int length){
-    cout << "\n\n\t";
-    for(int i = 0; i < length; i++){
-        cout << "-";
-    }
-    cout << "\n\t";
-    for(int i = 0; i < length; i++){
-        cout << "0";
-    }
-    cout << "\n\t";
-    for(int i = 0; i < length; i++){
-        cout << "-";
-    }
-    cout << "\n";
-}
-
-string generate_progress_bar(int timeSpent, int timeGoal, size_t barWidth = 25) {
-    if (timeGoal == 0) return string(barWidth, '-'); // Handle division by zero
-
-    double progress = static_cast<double>(timeSpent) / timeGoal;
-    size_t fullSegments = static_cast<size_t>(progress * barWidth);
-    double fractionalSegment = (progress * barWidth) - fullSegments;
-
-    string progressBar;
-
-    // Add filled squares
-    progressBar.append(fullSegments, '#');
-
-    // Add half-filled square if fractionalSegment is significant
-    if (fractionalSegment >= 0.5 && fullSegments < barWidth) {
-        progressBar += '=';
-        ++fullSegments;
-    }
-
-    // Add empty squares
-    progressBar.append(barWidth - fullSegments, '-');
-
-    return progressBar;
-}
-
-string format_fixed_width(const string& input, size_t width) {
-    if (input.length() > width) {
-        return input.substr(0, width); // Trim the string if it's too long
-    }
-    return input + string(width - input.length(), ' '); // Pad with spaces
-}
-
-void createTask(TaskManager& tasks) {
-    string name, description;
-    int timeGoal;
-
-    cout << "Enter task name: "; getline(cin, name);
-    cout << "Enter task description: "; getline(cin, description);
-    cout << "Enter time goal (in minutes): "; cin >> timeGoal;
-
-    tasks.add_task(name, description, timeGoal);
-
-    cout << "Task created successfully!\n";
-}
-
-void showTasks(TaskManager& taskManager) {
-    if (taskManager.empty()) { // Check if there are no tasks
-        cout << "No tasks available.\n";
-        return;
-    }
-
-    cout << "List of tasks:\n";
-
-    for (const auto& task : taskManager.get_all_tasks()) { // Iterate through all tasks
-        cout << "   Task ID: " << task.taskID << "\n"
-                  << "   Name: " << task.name << "\n"
-                  << "   Description: " << task.description << "\n"
-                  << "   Time Goal: " << task.timeGoalMinutes << " minutes\n"
-                  << "   Time Completed: " << task.timeCompletedMinutes << " minutes\n\n";
-    }
-}
-
-void goal_reached(TaskManager& tasks, Database& database, int taskID){
-    cout << 
-    "\t*****************************\n" <<
-    "\t ///!!!CONGRATULATIONS!!!\\\\\\\n" <<
-    "\t*****************************\n" <<
-    "You have reached ur goal for this task ⸜(｡˃ ᵕ ˂ )⸝♡\n";
-    
-    int choice;
-    auto& task = tasks.get_task_data(taskID);
-    int newTimeGoal;
-    do{
-        cout << "0 - Delete Task | 1 - Set new goal\n" << 
-                "Enter your choice: ";
+    char choice;
+    do {
+        print_intro();
+        cout << " \033[2mProjects\033[36m[G]\033[m | \033[2mSchedule (Coming soon)[S]\033[m | \033[2mExit\033[36m[X]\033[m\n";
+        cout << " > ";
         cin >> choice;
-        cin.ignore();
-
-        switch(choice){
-            case 0:
-                tasks.delete_task(taskID, database);
+        cin.ignore(); // Ignore leftover newline
+        switch (choice) {
+            case 'G':
+            case 'g':
+                project_menu();
                 break;
-            case 1:
-                cout << "\nEnter new goal (in minutes): ";
-                cin >> newTimeGoal;
-                tasks.change_task_data(taskID, task.name, task.description, newTimeGoal, 0);
+            case 'S':
+            case 's':
+                //CalendarMenu
+                break;
+            case 'X':
+            case 'x':
+                cout << "Exiting...";
                 break;
             default:
-                cout << "\nInvalid input. Please try again.\n";
-                break;
-        };
-    }while(choice != 0 || choice != 1);
+                cout << "Invalid choice. Please try again.\n";
+        }
+        cout << "\033[u\033[0J";
+    } while (choice != 'X' && choice != 'x');
+
+    return 0;
 }
 
-void startTask(TaskManager& tasks, Database& database) {
-    if (tasks.empty()) {
-        cout << "No tasks available to start.\n";
-        return;
+void print_intro(){
+    //be PRODUCTIVE ver. ...
+    cout << "\033[s\n\033[1m" <<
+        "\033[53m"<< string(MAXWIDTH, ' ') << "\033[m\n\033[1m" <<
+        " #            \033[93m####  ####   ###\033[m\033[1m    #             #        \n" <<
+        " #           \033[93m#   # #   # #   #\033[m\033[1m    #                      \n" <<
+        " ##  ###    \033[93m####  ####  #   #\033[m\033[1m    ## # # ### ### # # # ###\n" <<
+        " # # ###   \033[93m#     #  #  #   #\033[m\033[1m    # # # # #    #  # # # ###\n" <<
+        " ##  ###  \033[93m#     #   #  ###\033[m\033[1m       ## ### ###  #  #  #  ###\n" << 
+        "\033[4m"<< string(MAXWIDTH, ' ') << "\033[m\n" <<
+        " \033[4m\033[94m" << LINK << "\033[m\t" << VERSION << "\n\n";
+}
+
+struct Entry {
+    int id;
+    string name;
+    string description;
+    int priority;
+    string deadline;
+    int completion;
+    int level;
+    Entry(){}
+    Entry(int id, const string& name, const string& description = " ", int priority = 0, const string& deadline = " ", int completion = 0, int level = 0)
+        : id(id), name(name), description(description), priority(priority), deadline(deadline), completion(completion), level(level) {}
+};
+
+struct Session{
+    int id;
+    int taskID;
+    string startTime;
+    string endTime;
+    int pausedTime;
+    string comment;
+    Session(){}
+    Session(int id, int taskID, const string& startTime, const string& endTime, int pausedTime, const string& comment)
+        : id(id), taskID(taskID), startTime(startTime), endTime(endTime), pausedTime(pausedTime), comment(comment) {}
+};
+
+size_t get_displayed_width(const string& text) {
+    // Remove ANSI escape sequences using regex
+    std::regex escapeSeq("\033\\[[0-9;]*m");
+    string cleanedText = std::regex_replace(text, escapeSeq, "");
+    return cleanedText.length();
+}
+
+void fetch_tasks(int parentID, int level, std::vector<Entry>& tasks) {
+    // Fetch results for the current level
+    auto result = Database::fetch_results("SELECT taskID, name, completion FROM tasks WHERE parentID = " + std::to_string(parentID) + ";");
+
+    for (auto row : result) {
+        // Parse the row to extract task details
+        int taskID = std::stoi(row[0]);
+        const std::string& taskName = row[1];  // Assuming row[1] contains the task name
+        int completion = std::stoi(row[2]);
+
+        // Add the task to the list
+        tasks.emplace_back(taskID, taskName, " ", 0, " ",completion, level);
+
+        // Recursive call to fetch subtasks
+        fetch_tasks(taskID, level + 1, tasks);
+    }
+}
+
+string wrapText(const std::string& text, int maxWidth) {
+    if (maxWidth <= 0) return text;  // Handle invalid maxWidth case
+
+    std::vector<std::string> lines;
+    std::istringstream stream(text);
+    std::string word;
+    std::string currentLine;
+    int currentLength = 0;
+
+    while (stream >> word) {
+        if (currentLength + word.length() <= static_cast<unsigned int>(maxWidth)) {
+            // Add word to current line if within maxWidth
+            if (!currentLine.empty()) currentLine += " ";
+            currentLine += word;
+            currentLength += word.length() + 1; // +1 for space
+        } else {
+            // If adding the word exceeds maxWidth, store the current line
+            if (!currentLine.empty()) {
+                lines.push_back(currentLine);
+            }
+
+            // Start a new line
+            currentLine = word;
+            currentLength = word.length() + 1;
+        }
+
+        // If a single word is longer than maxWidth, force a break within the word
+        while (currentLine.length() > static_cast<unsigned int>(maxWidth)) {
+            lines.push_back(currentLine.substr(0, maxWidth));
+            currentLine = currentLine.substr(maxWidth);
+        }
     }
 
-    showTasks(tasks);
+    // Add the last line if it's not empty
+    if (!currentLine.empty()) {
+        lines.push_back(currentLine);
+    }
 
-    size_t taskID;
-    cout << "Enter the task ID to start: ";
-    cin >> taskID;
+    // Combine lines into a single string with newlines
+    std::ostringstream result;
+    for (size_t i = 0; i < lines.size(); ++i) {
+        if (i > 0) result << "\n";
+        result << lines[i];
+    }
+
+    return result.str();
+}
+
+std::string colorize_number(int num) {
+    switch (num) {
+        case 1: return "\033[31m1\033[m"; // Red
+        case 2: return "\033[33m2\033[m"; // Yellow
+        case 3: return "\033[32m3\033[m"; // Green
+        case 4: return "\033[34m4\033[m"; // Blue
+        case 5: return "\033[35m5\033[m"; // Purple 
+        default: return std::to_string(num); // Default: no color
+    }
+}
+
+int days_difference(const string& date_str) {
+    // Parse the input date string
+    std::tm input_date = {};
+    std::istringstream ss(date_str);
+    ss >> std::get_time(&input_date, "%Y-%m-%d");
+
+    if (ss.fail()) {
+        return 0;
+    }
+
+    // Convert input date to time_point
+    auto input_time = std::chrono::system_clock::from_time_t(std::mktime(&input_date));
+
+    // Get current date
+    auto now = std::chrono::system_clock::now();
+    auto now_time = std::chrono::system_clock::to_time_t(now);
+    std::tm current_date = *std::localtime(&now_time);
+    auto current_time = std::chrono::system_clock::from_time_t(std::mktime(&current_date));
+
+    // Calculate difference in days
+    auto difference = std::chrono::duration_cast<std::chrono::hours>(input_time - current_time).count() / 24;
+
+    return static_cast<int>(difference);
+}
+
+void update_entry_details(Entry& entry) {
+    string query = "SELECT Description, Priority, Deadline, Completion FROM Tasks WHERE taskID = " + std::to_string(entry.id) + ";";
+    
+    auto result = Database::fetch_results(query);
+    
+    if (!result.empty()) { // Ensure there is a result
+        entry.description = result[0][0]; 
+        entry.priority = std::stoi(result[0][1]); 
+        entry.deadline = result[0][2]; 
+        entry.completion = std::stoi(result[0][3]);
+    } else {
+        std::cerr << "No task found with ID: " << entry.id << std::endl;
+    }
+}
+
+void entries_display_horisontal(std::vector<Entry>& entries, int selectedIndex){
+    // Format output within the maxWidth constraint
+    string currentLine;
+    for (size_t i = 0; i < entries.size(); ++i) {
+        string formattedProject;
+        if (static_cast<int>(i) == selectedIndex) {
+            formattedProject = "\033[7m" + entries[i].name + "\033[m"; // Highlight selected
+        } else {
+            formattedProject = entries[i].name;
+        }
+
+        size_t formattedWidth = get_displayed_width(currentLine) + get_displayed_width(formattedProject) + 3;
+
+        if (currentLine.empty()) {
+            currentLine = formattedProject;
+        } else if (formattedWidth <= static_cast<size_t>(MAXWIDTH)) {
+            currentLine += " | " + formattedProject;
+        } else {
+            cout << currentLine << '\n';
+            currentLine = formattedProject;
+        }
+    }
+
+    // Print the last line if it exists
+    if (!currentLine.empty()) {
+        cout << currentLine << '\n';
+    }
+
+    cout << " \033[2m<<Previous\033[36m[P]\033[m "
+        << string(MAXWIDTH - (std::string(" <<Previous[P] Next[N]>> ").length() + 1), ' ')
+        << " \033[2mNext\033[36m[N]\033[m\033[2m>>\033[m\n";
+}
+
+string createProgressBar(int percent, int width) {
+    // Ensure the percentage is within the valid range
+    if (percent < 0) percent = 0;
+    if (percent > 100) percent = 100;
+
+    // Calculate the number of '#' characters to display
+    int filledWidth = (percent * width) / 100;
+
+    // Create the progress bar string
+    string bar = "|";
+    for (int i = 0; i < width; ++i) {
+        if (i < filledWidth) {
+            bar += '#';
+        } else {
+            bar += ' ';
+        }
+    }
+    bar += "|";
+
+    return bar;
+}
+
+void entry_details_display(Entry& entry){
+    int day_diff;
+    string days_diff_str = "";
+    if(entry.deadline != ""){
+        day_diff = days_difference(entry.deadline);
+        if(day_diff < 0){
+            days_diff_str = " \033[31m(" + std::to_string(day_diff) + " d overdue)\033[m";
+        }else{
+            days_diff_str = " (" + std::to_string(day_diff) + " d left)";
+        }
+    }
+
+    cout << "\033[53m"<< string(MAXWIDTH, ' ') << "\033[m\n";
+
+    cout << "\033[2mName:\033[36m[R]\033[m " << entry.name
+    << string(MAXWIDTH - string("Name[R]: Delete[J]" + entry.name).length(), ' ')
+    << "\033[2mDelete\033[31m[J]\033[m\n";
+
+    cout << "\033[2mPriority:\033[36m[Q]\033[m " << colorize_number(entry.priority) 
+         << string(MAXWIDTH - 11 - string("Priority:[Q] Deadline:[W] ").length() - get_displayed_width(days_diff_str), ' ');
+            cout << "\033[2mDeadline:\033[36m[W]\033[m " << entry.deadline;
+         if(entry.deadline != "")   
+            cout << "\033[2m" << days_diff_str << "\033[m";
+         cout << '\n';
+    
+    cout << "\033[2mDescription:\033[36m[E]\033[m\n"
+         << wrapText(entry.description, MAXWIDTH) << '\n';
+    
+    int bar_width = 20;
+    cout << string((int)((MAXWIDTH-bar_width)/2), ' ') << createProgressBar(entry.completion, bar_width) << entry.completion << "%\n";
+
+    cout << "\033[53m"<< string(MAXWIDTH, ' ') << "\033[m\n";
+}
+
+void entries_display_vertical(std::vector<Entry>& entries, int selectedIndex){
+    cout << " \033[2m^Up\033[36m[U]\033[m "
+        << string(MAXWIDTH - (std::string(" ^Up[U] Select task[S] Delete task[K] ").length() + 1), ' ')
+        << " \033[2mSelect task\033[36m[S]\033[m \033[2mDelete task\033[36m[K]\033[m\n";
+
+    for (size_t i = 0; i < entries.size(); ++i) {
+        const Entry& entry = entries[i];
+        string entryName = string(entry.level*2, ' ') + entry.name;
+
+
+        // Highlight selected task
+        if (static_cast<int>(i) == selectedIndex) {
+            entryName = "\033[7m" + entryName + "\033[m";
+            if(entry.completion == 100) entryName += "\033[2m\033[32m";
+        }
+
+        // Ensure taskName fits within maxWidth
+        size_t displayedWidth = get_displayed_width(entryName);
+        if (displayedWidth < MAXWIDTH - 7) {
+            entryName += string(MAXWIDTH - 7 - displayedWidth, '.');
+        } else if (displayedWidth > MAXWIDTH - 7) {
+            entryName = entryName.substr(0, MAXWIDTH - 7 - 3) + "...";
+        }
+
+        entryName += createProgressBar(entry.completion, 5);
+
+        if(entry.completion == 100){
+            entryName = "\033[2m\033[32m" + entryName + "\033[m";
+        }
+
+        cout << entryName << "\033[m\n";
+    }
+    cout << " \033[2m v Down\033[36m[D]\033[m "
+        << string(MAXWIDTH - (std::string(" v Down[D] Mark as Completed[Z]").length() + 1), ' ')
+        << " \033[2mMark as Completed\033[36m[Z]\033[m\n";
+
+    cout << "\033[2m Add new task\033[36m[T]\033[m\n";
+}
+
+void update_completion_status(int ID, int currentCompletion) {
+    // Determine new completion value
+    int newCompletion = (currentCompletion == 100) ? 0 : 100;
+
+    // Construct SQL query
+    std::string query = "UPDATE Tasks SET Completion = ? WHERE taskID = ?;";
+
+    // Execute update
+    std::vector<std::variant<string, int>> params = { newCompletion, ID };
+    if (Database::execute_prepared_query(query, params) == 0) {
+        std::cout << "\033[32mCompletion status updated successfully!\033[m\n";
+    } else {
+        std::cerr << "\033[31mFailed to update completion status.\033[m\n";
+    }
+}
+
+void update_entry(int ID, const std::string& field) {
+    std::string newValue;
+
+    // Prompt the user for a new value
+    std::cout << "Enter new " << field << ": ";
+    std::getline(std::cin >> std::ws, newValue); // Read input including spaces
+
+    // Input validation
+    if (field == "Priority") {
+        try {
+            int priority = std::stoi(newValue);
+            if (priority < 1 || priority > 5) {
+                std::cerr << "\033[31mInvalid priority! Must be between 1 and 5.\033[m\n";
+                return;
+            }
+        } catch (...) {
+            std::cerr << "\033[31mInvalid priority! Enter a number.\033[m\n";
+            return;
+        }
+    } else if (field == "Deadline") {
+        if (newValue.size() != 10 || newValue[4] != '-' || newValue[7] != '-') {
+            std::cerr << "\033[31mInvalid date format! Use YYYY-MM-DD.\033[m\n";
+            return;
+        }
+    }
+
+    // Construct SQL query
+    std::string query = "UPDATE Tasks SET " + field + " = ? WHERE taskID = ?;";
+
+    // Execute update
+    std::vector<std::variant<std::string, int>> params = { newValue, ID };
+    if (Database::execute_prepared_query(query, params) == 0) {
+        std::cout << "\033[32m" << field << " updated successfully!\033[m\n";
+    } else {
+        std::cerr << "\033[31mFailed to update " << field << ".\033[m\n";
+    }
+}
+
+void project_menu() {
+    cout << "\033[u\033[0J";
+    char input;
+    int selectedIndexProjects = 0;
+    int selectedIndexTasks = 0;
+
+    do {
+        cout << "\n";
+
+        std::vector<std::vector<string>> result = Database::fetch_results("SELECT taskID, Name, Description, Priority, Deadline FROM Tasks WHERE parentID IS NULL;");
+        
+        // Projects part:
+        std::vector<Entry> projects;
+        for(auto row : result){
+            projects.emplace_back(stoi(row[0]), row[1]);
+        }
+        projects.emplace_back(0, "\033[2m\033[36m[G]\033[m\033[2mAdd new project\033[m");
+        // Handle edge cases for selectedIndex
+        if (selectedIndexProjects >= static_cast<int>(projects.size() - 1)) {
+            selectedIndexProjects = projects.size() - 2;
+        } else if (selectedIndexProjects < 0) {
+            selectedIndexProjects = 0;
+        }
+
+        entries_display_horisontal(projects, selectedIndexProjects);
+        // Only call these functions if there are valid projects
+        if (!projects.empty() && selectedIndexProjects >= 0) {
+            update_entry_details(projects[selectedIndexProjects]);
+            entry_details_display(projects[selectedIndexProjects]);
+        }
+        // Tasks part:
+        std::vector<Entry> tasks;
+        fetch_tasks(projects[selectedIndexProjects].id, 0, tasks); // Fetch all tasks starting from root
+        // Handle edge cases for selectedIndex
+        if (selectedIndexTasks >= static_cast<int>(tasks.size())) {
+            selectedIndexTasks = tasks.size() - 1;
+        } else if (selectedIndexTasks < 0) {
+            selectedIndexTasks = 0;
+        }
+        cout << "\tTasks:\n";
+        entries_display_vertical(tasks, selectedIndexTasks);
+
+        cout <<"\033[4m"<< string(MAXWIDTH, ' ') << "\033[m\n" //divider
+         << "\033[2m Back\033[36m[X]\033[m\n";
+        cout << " > ";
+        cin >> input;
+
+        switch (input) {
+            case 'S': case 's':
+                cout << "\033[u\033[0J";
+                task_menu(tasks[selectedIndexTasks].id);
+                break;
+            case 'G': case 'g':
+                cout << "\033[u\033[0J";
+                create_entry();
+                break;
+            case 'P': case 'p':
+                selectedIndexProjects--; 
+                break;
+            case 'N': case 'n':
+                selectedIndexProjects++; 
+                break;
+            case 'T': case 't':
+                cout << "\033[u\033[0J";
+                create_entry(projects[selectedIndexProjects].id);
+                break;
+            case 'U': case 'u':
+                selectedIndexTasks--;
+                break;
+            case 'D': case 'd':
+                selectedIndexTasks++;
+                break;
+            case 'K': case 'k':
+                cout << "\033[u\033[0J";
+                delete_entry(tasks[selectedIndexTasks].id, tasks[selectedIndexTasks].name);
+                break;
+            case 'J': case 'j':
+                cout << "\033[u\033[0J";
+                delete_entry(projects[selectedIndexProjects].id, projects[selectedIndexProjects].name);
+                break;
+            case 'R': case 'r':
+                cout << "\033[u\033[0J";
+                update_entry(projects[selectedIndexProjects].id, "Name");
+                break;
+            case 'Q': case 'q':
+                cout << "\033[u\033[0J";
+                update_entry(projects[selectedIndexProjects].id, "Priority");
+                break;
+            case 'W': case 'w':
+                cout << "\033[u\033[0J";
+                update_entry(projects[selectedIndexProjects].id, "Deadline");
+                break;
+            case 'E': case 'e':
+                cout << "\033[u\033[0J";
+                update_entry(projects[selectedIndexProjects].id, "Description");
+                break;
+            case 'Z': case 'z':
+                update_completion_status(tasks[selectedIndexTasks].id, tasks[selectedIndexTasks].completion);
+                break;
+            case 'X': case 'x':
+                break;
+            default:
+                cout << "\033[31mInvalid input! Try again.\033[m\n";
+                break;
+        }
+
+        cout << "\033[u\033[0J"; // Clear previous output
+    } while (input != 'X' && input != 'x');
+}
+
+int create_entry(int parentID) {
     cin.ignore();
 
-    auto task = tasks.get_task_data(taskID);
+    // Collect user input
+    std::string name, description, priority, deadline;
 
-    cout << "Starting task: " << task.name << "\n"
-         << "Controls: [P] Pause, [C] Continue, [X] Stop\n";
+    // Name is mandatory
+    std::cout << "Enter name:\n > ";
+    std::getline(std::cin, name);
+    if (name.empty()) {
+        std::cerr << "Project name cannot be empty.\n";
+        return -1;
+    }
 
-    auto startTime = std::chrono::steady_clock::now();
-    auto& startTimeSystem = get_current_time(); 
-    bool running = true;
-    bool paused = false;
-    std::chrono::steady_clock::time_point pauseStartTime;
+    // Optional fields
+    std::cout << "Enter description:\n > ";
+    std::getline(std::cin, description);
+
+    std::cout << "Enter priority (1-5):\n > ";
+    std::getline(std::cin, priority);
+
+    std::cout << "Enter deadline (format: YYYY-MM-DD):\n > ";
+    std::getline(std::cin, deadline);
+
+    // Prepare data for insertion
+    std::vector<std::variant<std::string, int, std::nullptr_t>> data;
+
+    data.push_back(name); // Mandatory name
+
+    data.push_back(parentID == 0 
+    ? std::variant<std::string, int, std::nullptr_t>(nullptr) 
+    : std::variant<std::string, int, std::nullptr_t>(parentID));
+    data.push_back(description.empty()
+    ? std::variant<std::string, int, std::nullptr_t>(nullptr)  
+    : std::variant<std::string, int, std::nullptr_t>(description)); // Description
+    data.push_back(priority.empty() 
+    ? std::variant<std::string, int, std::nullptr_t>(nullptr)  
+    : std::variant<std::string, int, std::nullptr_t>(priority)); // Priority
+    data.push_back(deadline.empty() 
+    ? std::variant<std::string, int, std::nullptr_t>(nullptr)  
+    : std::variant<std::string, int, std::nullptr_t>(deadline)); // Deadline
+
+    // Insert data using the Database class
+    std::string sql = "INSERT INTO tasks (name, parentID, description, priority, deadline) VALUES (?, ?, ?, ?, ?);";
+    if (Database::insert_data(sql, data) != 0) {
+        return -1;
+    }
+
+    return 0;
+}
+
+void delete_entry(int ID, const string& name){
+    char input;
+    cout << "Are you sure you want to delete " << name << ", any subtasks and related data will also be deleted: "<< " (Y/N): ";
+    cin >> input;
+    do{
+        switch(input){
+            case 'Y':
+            case 'y':
+                Database::delete_entry(ID, "Tasks");
+                break;
+            case 'N':
+            case 'n':
+                break;
+            default:
+                cout << "\033[31mInvalid input! Try again.\033[m\n";
+                break;
+        }
+    }while(input != 'N' && input != 'n' && input != 'Y' && input != 'y');
+}
+
+void delete_session(int ID){
+    char input;
+    cout << "Are you sure you want to delete this session "<< " (Y/N): ";
+    cin >> input;
+    do{
+        switch(input){
+            case 'Y':
+            case 'y':
+                Database::delete_entry(ID, "Sessions");
+                break;
+            case 'N':
+            case 'n':
+                break;
+            default:
+                cout << "\033[31mInvalid input! Try again.\033[m\n";
+                break;
+        }
+    }while(input != 'N' && input != 'n' && input != 'Y' && input != 'y');
+}
+
+void fetch_task_info(Entry& entry){
+    string query = "SELECT Name, Description, Priority, Deadline, Completion FROM Tasks WHERE taskID = " + std::to_string(entry.id) + ";";
+
+    auto result = Database::fetch_results(query);
+
+    if (!result.empty()) { // Ensure there is a result
+        entry.name = result[0][0]; 
+        entry.description = result[0][1]; 
+        entry.priority = std::stoi(result[0][2]);
+        entry.deadline = result[0][3];
+        entry.completion = std::stoi(result[0][4]); 
+    } else {
+        std::cerr << "No task found with ID: " << entry.id << std::endl;
+    }
+}
+
+void fetch_sessions(int ID, std::vector<Session>& sessions){
+    auto result = Database::fetch_results("SELECT sessionID, startTime, endTime, pausedTime, comment FROM sessions WHERE taskID = " + std::to_string(ID) +";");
+
+    for(auto row : result){
+        sessions.emplace_back(std::stoi(row[0]), 0, row[1], row[2], std::stoi(row[3]), row[4]);
+    }
+}
+
+void sessions_display_vertical(const std::vector<Session>& sessions, int selectedIndex) {
+    // Table header
+    cout << "\tSessions:\n" << " \033[2m^Up\033[36m[O]\033[m "
+         << string(MAXWIDTH - (std::string(" ^Up[O] Delete session[H] ").length() + 1), ' ')
+         << "\033[2mDelete session\033[36m[H]\033[m\n";
+
+    cout << "\n Date      | Time     | Comment\n";
+    // Display each session
+    for (size_t i = 0; i < sessions.size(); ++i) {
+        const Session& session = sessions[i];
+
+        // Extract date from startTime (YYYY-MM-DD)
+        std::string startDate = session.startTime.substr(0, 10);
+
+        // Convert startTime and endTime (handling the comma format)
+        std::tm tm_start = {}, tm_end = {};
+        std::string startStr = session.startTime;
+        std::string endStr = session.endTime;
+        startStr[10] = ' '; // Replace ',' with space
+        endStr[10] = ' ';   // Replace ',' with space
+
+        std::istringstream ss_start(startStr), ss_end(endStr);
+        ss_start >> std::get_time(&tm_start, "%Y-%m-%d %H:%M:%S");
+        ss_end >> std::get_time(&tm_end, "%Y-%m-%d %H:%M:%S");
+
+        auto start_tp = std::chrono::system_clock::from_time_t(std::mktime(&tm_start));
+        auto end_tp = std::chrono::system_clock::from_time_t(std::mktime(&tm_end));
+
+        // Compute time spent in seconds
+        auto duration_sec = std::chrono::duration_cast<std::chrono::seconds>(end_tp - start_tp).count();
+        duration_sec -= session.pausedTime; // Subtract paused time
+
+        // Convert time spent to HH:MM:SS format
+        int hours = duration_sec / 3600;
+        int minutes = (duration_sec % 3600) / 60;
+        int seconds = duration_sec % 60;
+        std::string timeSpent = (hours < 10 ? "0" : "") + std::to_string(hours) + ":" +
+                                (minutes < 10 ? "0" : "") + std::to_string(minutes) + ":" +
+                                (seconds < 10 ? "0" : "") + std::to_string(seconds);
+
+        // Format the session details into a string
+        std::string sessionDetails = startDate + " | " + timeSpent + " | " + session.comment;
+
+        // Highlight the selected session
+        if (static_cast<int>(i) == selectedIndex) {
+            sessionDetails = "\033[7m" + sessionDetails + "\033[m";
+        }
+
+        // Ensure the session details fit within MAXWIDTH
+        size_t displayedWidth = get_displayed_width(sessionDetails);
+        if (displayedWidth > MAXWIDTH) {
+            sessionDetails = sessionDetails.substr(0, MAXWIDTH - 3) + "...";
+        } else if (displayedWidth < MAXWIDTH) {
+            sessionDetails += std::string(MAXWIDTH - displayedWidth, ' ');
+        }
+
+        cout << sessionDetails << '\n';
+    }
+
+    // Footer
+    cout << "\033[2m v Down\033[36m[L]\033[m\n";
+    cout << "\033[2m Start new session\033[36m[C]\033[m\n";
+}
+
+const string get_current_time() {
+    auto now = std::chrono::system_clock::now();
+    auto time_t_now = std::chrono::system_clock::to_time_t(now);
+    auto local_time = *std::localtime(&time_t_now);
+
+    int hours = local_time.tm_hour;
+    int minutes = local_time.tm_min;
+
+    std::ostringstream oss;
+    oss << std::setw(2) << std::setfill('0') << hours << ":"
+        << std::setw(2) << std::setfill('0') << minutes;
+
+    return oss.str();
+}
+
+void start_session_menu(Entry& task) {
+    // Get current time as system time
+    auto now = std::chrono::system_clock::now();
+    std::time_t nowTimeT = std::chrono::system_clock::to_time_t(now);
+
+    // Convert to string format YYYY-MM-DD HH:MM:SS
+    std::ostringstream startTimeStream;
+    startTimeStream << std::put_time(std::localtime(&nowTimeT), "%Y-%m-%d, %H:%M:%S");
+    std::string startTimeSystem = startTimeStream.str();
+
+    bool running = true, paused = false;
     int pausedSeconds = 0;
-    bool first = 1;
-    // Start a thread to handle timer display
+    std::chrono::steady_clock::time_point startTime = std::chrono::steady_clock::now();
+    std::chrono::steady_clock::time_point pauseStartTime;
+
+    std::cout << "\n Started session for task: " << task.name << "\n"
+              << " Controls: \033[2m Pause\033[36m[P]\033[m, \033[2m Stop\033[36m[X]\033[m\n";
+
     std::thread timerThread([&]() {
         while (running) {
             if (!paused) {
                 auto currentTime = std::chrono::steady_clock::now();
                 int elapsedSeconds = std::chrono::duration_cast<std::chrono::seconds>(currentTime - startTime).count() - pausedSeconds;
                 int hours = elapsedSeconds / 3600;
-                int minutes = elapsedSeconds / 60;
+                int minutes = (elapsedSeconds / 60) % 60;
                 int seconds = elapsedSeconds % 60;
 
-                // Convert hours, minutes, and seconds into digits
-                int hourTens = hours / 10;
-                int hourOnes = hours % 10;
-                int minTens = minutes / 10;
-                int minOnes = minutes % 10;
-                int secTens = seconds / 10;
-                int secOnes = seconds % 10;
-
-                if (!first) {
-                    // Clear previous display (assume it spans 7 lines)
-                    cout << "\033[18A"; // Move cursor up 17 lines to overwrite previous output
-                }
-
-                fancy_separator(82);
-                cout << "\n";
-                // Display the timer using bigDigits
-                for (int line = 0; line < 7; ++line) { // Assuming each big digit has 7 lines
-                    cout<< "\t" << bigDigits[hourTens].substr(line * 12, 11) << "  "  // Tens of hours
-                        << bigDigits[hourOnes].substr(line * 12, 11)  // Ones of hours
-                        << "  :  "  // Separator
-                        << bigDigits[minTens].substr(line * 12, 11) << "  "  // Tens of minutes
-                        << bigDigits[minOnes].substr(line * 12, 11)  // Ones of minutes
-                        << "  :  "  // Separator
-                        << bigDigits[secTens].substr(line * 12, 11) << "  "  // Tens of seconds
-                        << bigDigits[secOnes].substr(line * 12, 11) << "\n"; // Ones of seconds
-                }
-
-                fancy_separator(82);
-
-                first = 0;
-                cout.flush();
+                std::cout << "\r Elapsed Time: " << std::setw(2) << std::setfill('0') << hours << ":"
+                          << std::setw(2) << std::setfill('0') << minutes << ":"
+                          << std::setw(2) << std::setfill('0') << seconds << "    " << std::flush;
             }
-            std::this_thread::sleep_for(std::chrono::milliseconds(1000)); // Update every second
+            std::this_thread::sleep_for(std::chrono::seconds(1));
         }
     });
 
     while (running) {
         char command;
-        cin >> command;
-        cin.ignore();
+        std::cin >> command;
+        std::cin.ignore();
 
         switch (command) {
-            case 'P':
-            case 'p': // Pause
+            case 'P': case 'p':
                 if (!paused) {
                     paused = true;
                     pauseStartTime = std::chrono::steady_clock::now();
-                    cout << "\nTimer paused. Press [C] to continue or [X] to stop.\n";
+                    std::cout << "\n Timer paused. Press [C] to continue or [X] to stop.\n";
                 }
                 break;
-
-            case 'C':
-            case 'c': // Continue
+            case 'C': case 'c':
                 if (paused) {
                     paused = false;
                     auto pauseEndTime = std::chrono::steady_clock::now();
                     pausedSeconds += std::chrono::duration_cast<std::chrono::seconds>(pauseEndTime - pauseStartTime).count();
-                    cout << "\nTimer continued. Press [P] to pause or [X] to stop.\n";
-                    cout << "\033[6A\033[0J";
+
+                    cout << "\033[4A\033[0J";
+                }else{
+                    cout << "\033[1A\033[0J";
                 }
                 break;
-
-            case 'X':
-            case 'x': // Stop
+            case 'X': case 'x':
                 running = false;
                 break;
-
             default:
-                cout << "\nInvalid command. Use [P] to pause, [C] to continue, [X] to stop.\n";
+                std::cout << "\n Invalid command. Use [P] to pause, [C] to continue, [X] to stop.\n";
+                cout << "\033[4A\033[0J";
         }
     }
 
-    timerThread.join(); // Wait for the timer thread to finish
+    timerThread.join();
 
-    auto endTime = std::chrono::steady_clock::now();
-    auto& endTimeSystem = get_current_time();
-    int elapsedMinutes = std::chrono::duration_cast<std::chrono::minutes>(endTime - startTime).count();
-    elapsedMinutes -= pausedSeconds / 60;
+    // Get end time in the same format
+    now = std::chrono::system_clock::now();
+    nowTimeT = std::chrono::system_clock::to_time_t(now);
+    
+    std::ostringstream endTimeStream;
+    endTimeStream << std::put_time(std::localtime(&nowTimeT), "%Y-%m-%d, %H:%M:%S");
+    std::string endTimeSystem = endTimeStream.str();
 
-    task.timeCompletedMinutes += elapsedMinutes;
-    tasks.change_task_data(taskID, task.name, task.description, task.timeGoalMinutes, task.timeCompletedMinutes);
+    // Prompt user for a comment
+    std::string comment;
+    std::cout << "\n Enter a comment for this session (or press Enter to skip): ";
+    std::getline(std::cin, comment);
 
-    database.add_entry(task.taskID, elapsedMinutes, startTimeSystem, endTimeSystem, pausedSeconds/60);
+    // Trim whitespace (optional but useful)
+    comment.erase(comment.find_last_not_of(" \t\n\r\f\v") + 1);
+    comment.erase(0, comment.find_first_not_of(" \t\n\r\f\v"));
 
-    cout << "\nTask stopped. Time added: " << elapsedMinutes << " minutes.\n";
+    // Create session struct
+    Session session(0, task.id, startTimeSystem, endTimeSystem, pausedSeconds, comment);
 
-    if(task.timeCompletedMinutes < task.timeGoalMinutes){
-        cout << "Overall progress:\t[" << generate_progress_bar(task.timeCompletedMinutes, task.timeGoalMinutes, 25) << "]\n";
-    }else{
-         goal_reached(tasks, database, taskID);
-    }
+    // Insert session into the database
+    std::string query = "INSERT INTO Sessions (taskID, startTime, endTime, pausedTime, comment) VALUES (?, ?, ?, ?, ?);";
+    Database::insert_data(query, {task.id, session.startTime, session.endTime, session.pausedTime, comment});
 }
 
-void deleteTask(TaskManager& tasks, Database& database){
-    showTasks(tasks);    
-    size_t taskID;
-    cout << "\nEnter task ID to delete:\n";
-    cin >> taskID;
-    cin.ignore();
-    tasks.delete_task(taskID, database);
-}
+void task_menu(int ID){
+    cout << "\033[u\033[0J";
 
-void display_day_info(Database& db, TaskManager& taskManager, const string& date) {
-    // Fetch data for the current day
-    json dayData = db.get_day_data(date);
+    char input;
+    int selectedIndexSubT = 0;
+    int selectedIndexSession = 0;
 
-    // Check if there are any entries for the current day
-    if (dayData.empty()) {
-        cout << "No data for the date: " << date << "\n";
-        return;
-    }
-
-    // Calculate overall hours spent
-    int totalMinutes = 0;
-    for (const auto& session : dayData["sessions"]) {
-        totalMinutes += session.at("timeSpent").get<int>();
-    }
-
-    // Display overall hours spent
-    cout << "Date: " << date << "\n";
-    cout << "Overall Hours Spent: " << totalMinutes / 60 << "h " 
-         << totalMinutes % 60 << "m\n\n";
-
-    // Display table of hours spent on each task with name and goal
-    std::map<int, int> taskTimeMap;
-    for (const auto& session : dayData["sessions"]) {
-        taskTimeMap[session.at("taskID")] += session.at("timeSpent").get<int>();
-    }
-
-    cout << "Hours Spent on Individual Tasks:\n";
-    cout << "--------------------------------------------------------------------------------\n";
-    cout << "Task ID | Task Name        | Goal      | Spent     | Overall progress \n";
-    cout << "--------|------------------|-----------|-----------|----------------------------\n";
-    for (const auto& [taskID, timeSpent] : taskTimeMap) {
-        try {
-            const auto& task = taskManager.get_task_data(taskID);
-            cout<< format_fixed_width(std::to_string(task.taskID), 7) << " | " 
-                << format_fixed_width(task.name, 16) << " | " 
-                << format_fixed_width(std::to_string(task.timeGoalMinutes / 60) + "h " + std::to_string(task.timeGoalMinutes % 60) + "m", 9) << " | "
-                << format_fixed_width(std::to_string(timeSpent / 60) + "h " + std::to_string(timeSpent % 60) + "m", 9) << " | " 
-                << "[" << generate_progress_bar(task.timeCompletedMinutes, task.timeGoalMinutes) << "]" << "\n";
-        } catch (const std::out_of_range&) {
-            cout << taskID << " -> [Task not found]";
+    do{
+        Entry task;
+        task.id = ID;
+        std::vector<Entry> subtasks;
+        
+        fetch_task_info(task);
+        fetch_tasks(task.id, 0, subtasks);
+        // Handle edge cases for selectedIndex
+        if (selectedIndexSubT >= static_cast<int>(subtasks.size())) {
+            selectedIndexSubT = subtasks.size() - 1;
+        } else if (selectedIndexSubT < 0) {
+            selectedIndexSubT = 0;
         }
-    }
-    cout << "\n";
+        cout << '\n';
+        entry_details_display(task);
+        cout << "\tSubtasks:\n";
+        entries_display_vertical(subtasks, selectedIndexSubT);
 
-    // Display table of sessions
-    cout << "Task Sessions:\n";
-    cout << "-----------------------------------------------------------------------------\n";
-    cout << "Task ID | Task Name        | Start     | End       | Pause Time | Time Spent\n";
-    cout << "--------|------------------|-----------|-----------|------------|------------\n";
-    // Create a sorted vector of sessions based on taskID
-    vector<json> sortedSessions = dayData["sessions"].get<vector<json>>();
-    std::sort(sortedSessions.begin(), sortedSessions.end(), [](const json& a, const json& b) {
-        return a.at("taskID").get<int>() < b.at("taskID").get<int>();
-    });
+        std::vector<Session> sessions;
+        fetch_sessions(task.id, sessions);
+        // Handle edge cases for selectedIndexSessions
+        if (selectedIndexSession >= static_cast<int>(sessions.size())) {
+            selectedIndexSession = sessions.size() - 1;
+        } else if (selectedIndexSession < 0) {
+            selectedIndexSession = 0;
+        }
 
-    for (const auto& session : sortedSessions) {
-        try {
-            const auto& task = taskManager.get_task_data(session["taskID"]);
-            cout<< format_fixed_width(std::to_string(session.at("taskID").get<int>()), 7) << " | "
-                << format_fixed_width(task.name, 16) << " | "
-                << format_fixed_width(session.at("startTime").get<string>(), 9) << " | "
-                << format_fixed_width(session.at("endTime").get<string>(), 9) << " | "
-                << format_fixed_width(std::to_string(session.at("pauseTime").get<int>() / 60) + "h " + std::to_string(session.at("pauseTime").get<int>() % 60) + "m", 10) << " | "
-                << format_fixed_width(std::to_string(session.at("timeSpent").get<int>() / 60) + "h " + std::to_string(session.at("timeSpent").get<int>() % 60) + "m", 10) << "\n";
-        } catch (const std::out_of_range&) {
-            cout << session["taskID"] << " -> [Task not found]";
-    }
-}
-}
+        cout <<"\033[4m"<< string(MAXWIDTH, ' ') << "\033[m\n"; //divider
 
-int main() {
-    TaskManager taskList;
-    Database database;
+        sessions_display_vertical(sessions, selectedIndexSession);
 
-    char choice;
-    do {
-        cout << "\nMenu:\n1. Create Task | 2. Show Tasks | 3. Start Task | 4. Delete task\n5. Display Info for current day | 6. Display info for specific date\n7. Exit\nEnter your choice: ";
-        cin >> choice;
-        cin.ignore(); // Ignore leftover newline
-        string dateInput;
-        switch (choice) {
-            case '1':
-                createTask(taskList);
+        cout <<"\033[4m"<< string(MAXWIDTH, ' ') << "\033[m\n" //divider
+         << "\033[2m Back\033[36m[X]\033[m\n";
+
+        cout << " > ";
+        cin >> input;
+
+        switch(input){
+            case 'S': case 's':
+                cout << "\033[u\033[0J";
+                task_menu(subtasks[selectedIndexSubT].id);
                 break;
-            case '2':
-                showTasks(taskList);
+            case 'T': case 't':
+                cout << "\033[u\033[0J";
+                create_entry(task.id);
                 break;
-            case '3':
-                startTask(taskList, database);
+            case 'U': case 'u':
+                selectedIndexSubT--;
                 break;
-            case '4':
-                deleteTask(taskList, database);
+            case 'D': case 'd':
+                selectedIndexSubT++;
                 break;
-            case '5':
-                display_day_info(database, taskList, get_current_date());
+            case 'K': case 'k':
+                cout << "\033[u\033[0J";
+                delete_entry(subtasks[selectedIndexSubT].id, subtasks[selectedIndexSubT].name);
                 break;
-            case '6':
-                cout << "Specify the date which you would like to see info on (format: year-month-day, example: 2024-12-19):\n";
-                cin >> dateInput;
-                display_day_info(database, taskList, dateInput);
+            case 'J': case 'j':
+                cout << "\033[u\033[0J";
+                delete_entry(task.id, task.name);
                 break;
-            case '7':
-                cout << "Exiting...\n";
+            case 'R': case 'r':
+                cout << "\033[u\033[0J";
+                update_entry(task.id, "Name");
+                break;
+            case 'Q': case 'q':
+                cout << "\033[u\033[0J";
+                update_entry(task.id, "Priority");
+                break;
+            case 'W': case 'w':
+                cout << "\033[u\033[0J";
+                update_entry(task.id, "Deadline");
+                break;
+            case 'E': case 'e':
+                cout << "\033[u\033[0J";
+                update_entry(task.id, "Description");
+                break;
+            case 'Z': case 'z':
+                update_completion_status(subtasks[selectedIndexSubT].id, subtasks[selectedIndexSubT].completion);
+                break;
+            case 'O': case 'o':
+                selectedIndexSession--;
+                break;
+            case 'L': case 'l':
+                selectedIndexSession++;
+                break;
+            case 'C': case 'c':
+                cout << "\033[u\033[0J";
+                start_session_menu(task);
+                break;
+            case 'H': case 'h':
+                delete_session(sessions[selectedIndexSession].id);
+                break;
+            case 'X': case 'x':
                 break;
             default:
-                cout << "Invalid choice. Please try again.\n";
+                cout << "\033[31mInvalid input! Try again.\033[m\n";
+                break;
         }
-    } while (choice != '7');
-
-    return 0;
+    cout << "\033[u\033[0J";
+    }while(input != 'X' && input != 'x');
 }
