@@ -3,15 +3,26 @@
 #include <fstream>
 #include <stdexcept>
 #include "database.hpp"
+#include <filesystem>
 
 #define DATABASE_PATH "database/taskMdatabase.db"
 
 void Database::initialize_database() {
+    // Extract the directory path from DATABASE_PATH
+    std::filesystem::path dbPath(DATABASE_PATH);
+    std::filesystem::path dbDirectory = dbPath.parent_path();
+
+    // Ensure the directory exists
+    if (!std::filesystem::exists(dbDirectory)) {
+        std::filesystem::create_directories(dbDirectory);
+    }
+
     // Check if the database file exists
     std::ifstream dbFile(DATABASE_PATH);
     bool databaseExists = dbFile.good();
     dbFile.close();
 
+    // Open (or create) the database
     sqlite3* db;
     if (sqlite3_open(DATABASE_PATH, &db) != SQLITE_OK) {
         throw std::runtime_error("Failed to open or create the database");
