@@ -9,7 +9,7 @@ SQLITE_LIB = -lsqlite3   # SQLite library to link against
 # Source and object files
 SRC = $(SRC_DIR)/main.cpp $(SRC_DIR)/database.cpp
 OBJ = $(SRC:$(SRC_DIR)/%.cpp=$(BIN_DIR)/%.o)
-TARGET = task_tracker.exe
+TARGET = bePROductive.exe
 
 # Default target
 all: $(BIN_DIR) $(TARGET)
