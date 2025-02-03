@@ -49,14 +49,12 @@ void Database::initialize_database() {
             CREATE TABLE "Sessions" (
                 "sessionID"	INTEGER NOT NULL UNIQUE,
                 "taskID"	INTEGER NOT NULL,
-                "startTime"	TEXT NOT NULL,
-                "endTime"	TEXT NOT NULL,
+                "startTime"	INTEGER NOT NULL,
+                "endTime"	INTEGER NOT NULL,
                 "pausedTime"	INTEGER NOT NULL DEFAULT 0,
                 "comment"	TEXT,
                 PRIMARY KEY("sessionID" AUTOINCREMENT),
-                FOREIGN KEY("taskID") REFERENCES "Tasks"("taskID") ON DELETE CASCADE,
-                CHECK("startTime" LIKE '____-__-__, __:__:__'),
-                CHECK("endTime" LIKE '____-__-__, __:__:__')
+                FOREIGN KEY("taskID") REFERENCES "Tasks"("taskID") ON DELETE CASCADE
             );
 
             CREATE TRIGGER delete_update_parent_completion
