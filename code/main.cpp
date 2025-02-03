@@ -7,7 +7,7 @@
 #include "database.hpp"
 #include <thread>
 
-#define LINK "https://github.com/uwuebu/task_tracker"
+#define LINK "https://github.com/uwuebu/bePROductive"
 #define VERSION "v. 0.0.1/test"
 
 #define MAXWIDTH 58
