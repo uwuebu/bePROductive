@@ -1,5 +1,5 @@
 # What is bePROductive
-  It's a program designed for planning and tracking progress of projects. 
+  bePROductive is a console application designed for planning and tracking progress of projects. 
   It is capable of creating any amount of subtasks, as well as, set any description, priority or deadline to them.
   Console interface keeps it simple and suitable for low performance systems or saving battery life.
   Other feature that is already implemented is an ability to create sessions for any task (for now its just a timer), which could aid in performance tracking.
