@@ -113,83 +113,110 @@ void Database::initialize_database() {
     sqlite3_close(db);
 }
 
-void Database::execute_query(const std::string& query){
+void Database::execute_query(const std::string& query) {
     sqlite3* db;
-    if(sqlite3_open(DATABASE_PATH, &db)){
+    
+    // Open the SQLite database at the specified path
+    if (sqlite3_open(DATABASE_PATH, &db)) {
         throw std::runtime_error("SQL error: failed to open database");
     }
 
     char* errMsg = nullptr;
+    
+    // Execute the SQL query using sqlite3_exec and check for errors
     if (sqlite3_exec(db, query.c_str(), nullptr, nullptr, &errMsg) != SQLITE_OK) {
-        std::string error = errMsg;
-        sqlite3_free(errMsg);
-        throw std::runtime_error("SQL error: " + error);
+        std::string error = errMsg;  // Capture the error message
+        sqlite3_free(errMsg);         // Free the memory allocated for the error message
+        throw std::runtime_error("SQL error: " + error); // Throw an exception with the error details
     }
 
+    // Close the database connection
     sqlite3_close(db);
 }
 
-std::vector<std::vector<std::string>> Database::fetch_results(const std::string& query){
+std::vector<std::vector<std::string>> Database::fetch_results(const std::string& query) {
     sqlite3* db;
-    if(sqlite3_open(DATABASE_PATH, &db)){
+    
+    // Open the SQLite database at the specified path
+    if (sqlite3_open(DATABASE_PATH, &db)) {
         throw std::runtime_error("SQL error: failed to open database");
     }
 
     sqlite3_stmt* stmt;
+    
+    // Prepare the SQL query for execution
     if (sqlite3_prepare_v2(db, query.c_str(), -1, &stmt, nullptr) != SQLITE_OK) {
         throw std::runtime_error("Failed to prepare statement: " + std::string(sqlite3_errmsg(db)));
     }
 
     std::vector<std::vector<std::string>> results;
+    
+    // Execute the query and fetch rows one by one
     while (sqlite3_step(stmt) == SQLITE_ROW) {
-        int cols = sqlite3_column_count(stmt);
+        int cols = sqlite3_column_count(stmt);  // Get the number of columns in the current row
         std::vector<std::string> row;
+        
+        // Loop through each column in the current row and store its value in the 'row' vector
         for (int i = 0; i < cols; ++i) {
             const unsigned char* text = sqlite3_column_text(stmt, i);
-            row.push_back(text ? reinterpret_cast<const char*>(text) : "");
+            row.push_back(text ? reinterpret_cast<const char*>(text) : ""); // Handle NULL values
         }
+        
+        // Add the row to the results vector
         results.push_back(row);
     }
-    sqlite3_finalize(stmt);
-    sqlite3_close(db);
-    return results;
+
+    sqlite3_finalize(stmt);  // Finalize the prepared statement
+    sqlite3_close(db);       // Close the database connection
+    return results;          // Return the results as a 2D vector
 }
+
 
 int Database::insert_data(const std::string& query, const std::vector<std::variant<std::string, int, std::nullptr_t>>& data) {
     sqlite3* db;
-    if(sqlite3_open(DATABASE_PATH, &db)){
+    
+    // Open the SQLite database at the specified path
+    if (sqlite3_open(DATABASE_PATH, &db)) {
         throw std::runtime_error("SQL error: failed to open database");
     }
 
     sqlite3_stmt* stmt = nullptr;
-
+    
+    // Prepare the SQL query for execution
     if (sqlite3_prepare_v2(db, query.c_str(), -1, &stmt, nullptr) != SQLITE_OK) {
         std::cerr << "Failed to prepare statement: " << sqlite3_errmsg(db) << std::endl;
         return -1;
     }
 
-    // Bind each parameter from the data vector
+    // Bind data to the prepared statement based on their types (string, int, or null)
     for (size_t i = 0; i < data.size(); ++i) {
         const auto& value = data[i];
+        
+        // If the value is a string, bind it as a text field
         if (std::holds_alternative<std::string>(value)) {
             sqlite3_bind_text(stmt, static_cast<int>(i + 1), std::get<std::string>(value).c_str(), -1, SQLITE_STATIC);
-        } else if (std::holds_alternative<int>(value)) {
+        } 
+        // If the value is an integer, bind it as an integer field
+        else if (std::holds_alternative<int>(value)) {
             sqlite3_bind_int(stmt, static_cast<int>(i + 1), std::get<int>(value));
-        } else if (std::holds_alternative<std::nullptr_t>(value)) {
+        } 
+        // If the value is null, bind it as a null field
+        else if (std::holds_alternative<std::nullptr_t>(value)) {
             sqlite3_bind_null(stmt, static_cast<int>(i + 1));
         }
     }
 
-    // Execute the query
+    // Execute the query and check if it was successful
     if (sqlite3_step(stmt) != SQLITE_DONE) {
         std::cerr << "Error inserting data: " << sqlite3_errmsg(db) << std::endl;
         sqlite3_finalize(stmt);
         return -1;
     }
 
-    sqlite3_finalize(stmt);
-    return 0;
+    sqlite3_finalize(stmt);  // Finalize the prepared statement
+    return 0;                 // Return 0 on success
 }
+
 
 void Database::delete_entry(int ID, const std::string& table) {
     sqlite3* db;
@@ -244,17 +271,24 @@ void Database::delete_entry(int ID, const std::string& table) {
 
 int Database::execute_prepared_query(const std::string& query, const std::vector<std::variant<std::string, int>>& params) {
     sqlite3* db;
+    
+    // Open the SQLite database at the specified path
     if (sqlite3_open(DATABASE_PATH, &db) != SQLITE_OK) {
         throw std::runtime_error("SQL error: failed to open database");
     }
+
+    // Enable recursive triggers for foreign key operations (if any)
     sqlite3_exec(db, "PRAGMA recursive_triggers = ON;", nullptr, nullptr, nullptr);
+    
     sqlite3_stmt* stmt;
+    
+    // Prepare the SQL query for execution
     if (sqlite3_prepare_v2(db, query.c_str(), -1, &stmt, nullptr) != SQLITE_OK) {
         std::cerr << "Failed to prepare statement: " << sqlite3_errmsg(db) << std::endl;
         return -1;
     }
 
-    // Bind parameters
+    // Bind parameters to the prepared statement based on their types (string or int)
     for (size_t i = 0; i < params.size(); ++i) {
         if (std::holds_alternative<std::string>(params[i])) {
             sqlite3_bind_text(stmt, i + 1, std::get<std::string>(params[i]).c_str(), -1, SQLITE_STATIC);
@@ -263,7 +297,7 @@ int Database::execute_prepared_query(const std::string& query, const std::vector
         }
     }
 
-    // Execute statement
+    // Execute the statement and check if it was successful
     int result = sqlite3_step(stmt);
     if (result != SQLITE_DONE) {
         std::cerr << "SQL error: " << sqlite3_errmsg(db) << std::endl;
@@ -272,7 +306,8 @@ int Database::execute_prepared_query(const std::string& query, const std::vector
         return -1;
     }
 
-    sqlite3_finalize(stmt);
-    sqlite3_close(db);
-    return 0;
+    sqlite3_finalize(stmt);  // Finalize the prepared statement
+    sqlite3_close(db);       // Close the database connection
+    return 0;                 // Return 0 on success
 }
+
