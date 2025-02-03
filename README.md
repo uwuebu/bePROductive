@@ -7,11 +7,11 @@
 # Pictures
   Main menu:
 
-  ![image](https://github.com/user-attachments/assets/9621cbf8-7d95-4fda-9588-91856f402671)
+  ![image](https://github.com/user-attachments/assets/e9a827fa-ecd6-4d94-ae5b-ff256ceaa120)
 
   Projects menu:
 
-  ![image](https://github.com/user-attachments/assets/e7ee9d2d-96a2-431e-a622-96416c45118b)
+  ![image](https://github.com/user-attachments/assets/7f05d0ba-d8b6-4e5f-a83f-3a8ddcdf8669)
 
   Session timer:
 
@@ -19,7 +19,7 @@
 
   Task menu:
 
-  ![image](https://github.com/user-attachments/assets/3b856102-9743-43fb-b512-9b5828315fcb)
+  ![image](https://github.com/user-attachments/assets/c8875fd4-9b43-4843-937d-00b5905c8ecd)
 
 # on Windows
   Copy the repository and run make.
