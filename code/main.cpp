@@ -82,16 +82,16 @@ struct Entry {
         : id(id), name(name), description(description), priority(priority), deadline(deadline), completion(completion), level(level) {}
 };
 
-struct Session{
+struct Session {
     int id;
     int taskID;
-    string startTime;
-    string endTime;
-    int pausedTime;
-    string comment;
-    Session(){}
-    Session(int id, int taskID, const string& startTime, const string& endTime, int pausedTime, const string& comment)
-        : id(id), taskID(taskID), startTime(startTime), endTime(endTime), pausedTime(pausedTime), comment(comment) {}
+    int timeSpent;   // Total time spent in seconds
+    std::string date; // Date in "YYYY-MM-DD" format
+    std::string comment;
+
+    Session() {}
+    Session(int id, int taskID, int timeSpent, const std::string& date, const std::string& comment)
+        : id(id), taskID(taskID), timeSpent(timeSpent), date(date), comment(comment) {}
 };
 
 size_t get_displayed_width(const string& text) {
@@ -273,6 +273,41 @@ string createProgressBar(int percent, int width) {
     return bar;
 }
 
+int get_total_time_spent(int taskID) {
+    // Construct the full SQL query with the taskID directly embedded
+    std::string query = 
+        "WITH RECURSIVE TaskHierarchy AS ("
+        "    SELECT taskID FROM Tasks WHERE taskID = " + std::to_string(taskID) + 
+        "    UNION ALL "
+        "    SELECT t.taskID FROM Tasks t "
+        "    INNER JOIN TaskHierarchy th ON t.parentID = th.taskID"
+        ") "
+        "SELECT COALESCE(SUM(s.endTime - s.startTime - s.pausedTime), 0) "
+        "FROM Sessions s "
+        "INNER JOIN TaskHierarchy th ON s.taskID = th.taskID;";
+
+    auto result = Database::fetch_results(query);
+
+    return (!result.empty() && !result[0][0].empty()) ? std::stoi(result[0][0]) : 0;
+}
+
+std::string format_time(int seconds) {
+    using namespace std::chrono;
+
+    // Calculate hours, minutes, and seconds
+    int hours = seconds / 3600;
+    int minutes = (seconds % 3600) / 60;
+    int remaining_seconds = seconds % 60;
+
+    // Use stringstream to format the result
+    std::stringstream time_stream;
+    time_stream << std::setw(2) << std::setfill('0') << hours << ":"
+                << std::setw(2) << std::setfill('0') << minutes << ":"
+                << std::setw(2) << std::setfill('0') << remaining_seconds;
+
+    return time_stream.str();
+}
+
 void entry_details_display(Entry& entry){
     int day_diff;
     string days_diff_str = "";
@@ -291,6 +326,8 @@ void entry_details_display(Entry& entry){
     << string(MAXWIDTH - string("Name[R]: Delete[J]" + entry.name).length(), ' ')
     << "\033[2mDelete\033[31m[J]\033[m\n";
 
+    cout << "\033[2mTotal time: \033[m" << format_time(get_total_time_spent(entry.id)) << '\n';
+
     cout << "\033[2mPriority:\033[36m[Q]\033[m " << colorize_number(entry.priority) 
          << string(MAXWIDTH - 11 - string("Priority:[Q] Deadline:[W] ").length() - get_displayed_width(days_diff_str), ' ');
             cout << "\033[2mDeadline:\033[36m[W]\033[m " << entry.deadline;
@@ -303,7 +340,7 @@ void entry_details_display(Entry& entry){
     
     int bar_width = 20;
     cout << string((int)((MAXWIDTH-bar_width)/2), ' ') << createProgressBar(entry.completion, bar_width) << entry.completion << "%\n";
-
+    
     cout << "\033[53m"<< string(MAXWIDTH, ' ') << "\033[m\n";
 }
 
@@ -617,11 +654,15 @@ void fetch_task_info(Entry& entry){
     }
 }
 
-void fetch_sessions(int ID, std::vector<Session>& sessions){
-    auto result = Database::fetch_results("SELECT sessionID, startTime, endTime, pausedTime, comment FROM sessions WHERE taskID = " + std::to_string(ID) +";");
+void fetch_sessions(int ID, std::vector<Session>& sessions) {
+    auto result = Database::fetch_results(
+        "SELECT sessionID, (endTime - startTime - pausedTime) AS timeSpent, "
+        "DATE(startTime, 'unixepoch') AS sessionDate, comment "
+        "FROM sessions WHERE taskID = " + std::to_string(ID) + ";"
+    );
 
-    for(auto row : result){
-        sessions.emplace_back(std::stoi(row[0]), 0, row[1], row[2], std::stoi(row[3]), row[4]);
+    for (const auto& row : result) {
+        sessions.emplace_back(std::stoi(row[0]), ID, std::stoi(row[1]), row[2], row[3]);
     }
 }
 
@@ -632,41 +673,21 @@ void sessions_display_vertical(const std::vector<Session>& sessions, int selecte
          << "\033[2mDelete session\033[36m[H]\033[m\n";
 
     cout << "\n Date      | Time     | Comment\n";
+
     // Display each session
     for (size_t i = 0; i < sessions.size(); ++i) {
         const Session& session = sessions[i];
 
-        // Extract date from startTime (YYYY-MM-DD)
-        std::string startDate = session.startTime.substr(0, 10);
-
-        // Convert startTime and endTime (handling the comma format)
-        std::tm tm_start = {}, tm_end = {};
-        std::string startStr = session.startTime;
-        std::string endStr = session.endTime;
-        startStr[10] = ' '; // Replace ',' with space
-        endStr[10] = ' ';   // Replace ',' with space
-
-        std::istringstream ss_start(startStr), ss_end(endStr);
-        ss_start >> std::get_time(&tm_start, "%Y-%m-%d %H:%M:%S");
-        ss_end >> std::get_time(&tm_end, "%Y-%m-%d %H:%M:%S");
-
-        auto start_tp = std::chrono::system_clock::from_time_t(std::mktime(&tm_start));
-        auto end_tp = std::chrono::system_clock::from_time_t(std::mktime(&tm_end));
-
-        // Compute time spent in seconds
-        auto duration_sec = std::chrono::duration_cast<std::chrono::seconds>(end_tp - start_tp).count();
-        duration_sec -= session.pausedTime; // Subtract paused time
-
-        // Convert time spent to HH:MM:SS format
-        int hours = duration_sec / 3600;
-        int minutes = (duration_sec % 3600) / 60;
-        int seconds = duration_sec % 60;
+        // Convert timeSpent (stored in seconds) to HH:MM:SS format
+        int hours = session.timeSpent / 3600;
+        int minutes = (session.timeSpent % 3600) / 60;
+        int seconds = session.timeSpent % 60;
         std::string timeSpent = (hours < 10 ? "0" : "") + std::to_string(hours) + ":" +
                                 (minutes < 10 ? "0" : "") + std::to_string(minutes) + ":" +
                                 (seconds < 10 ? "0" : "") + std::to_string(seconds);
 
         // Format the session details into a string
-        std::string sessionDetails = startDate + " | " + timeSpent + " | " + session.comment;
+        std::string sessionDetails = session.date + " | " + timeSpent + " | " + session.comment;
 
         // Highlight the selected session
         if (static_cast<int>(i) == selectedIndex) {
@@ -689,35 +710,18 @@ void sessions_display_vertical(const std::vector<Session>& sessions, int selecte
     cout << "\033[2m Start new session\033[36m[C]\033[m\n";
 }
 
-const string get_current_time() {
-    auto now = std::chrono::system_clock::now();
-    auto time_t_now = std::chrono::system_clock::to_time_t(now);
-    auto local_time = *std::localtime(&time_t_now);
-
-    int hours = local_time.tm_hour;
-    int minutes = local_time.tm_min;
-
-    std::ostringstream oss;
-    oss << std::setw(2) << std::setfill('0') << hours << ":"
-        << std::setw(2) << std::setfill('0') << minutes;
-
-    return oss.str();
+int get_current_time() {
+    return static_cast<int>(std::chrono::system_clock::to_time_t(std::chrono::system_clock::now()));
 }
 
 void start_session_menu(Entry& task) {
-    // Get current time as system time
-    auto now = std::chrono::system_clock::now();
-    std::time_t nowTimeT = std::chrono::system_clock::to_time_t(now);
-
-    // Convert to string format YYYY-MM-DD HH:MM:SS
-    std::ostringstream startTimeStream;
-    startTimeStream << std::put_time(std::localtime(&nowTimeT), "%Y-%m-%d, %H:%M:%S");
-    std::string startTimeSystem = startTimeStream.str();
+    // Get current time as an integer timestamp
+    int startTime = get_current_time();
 
     bool running = true, paused = false;
     int pausedSeconds = 0;
-    std::chrono::steady_clock::time_point startTime = std::chrono::steady_clock::now();
-    std::chrono::steady_clock::time_point pauseStartTime;
+    auto startTimePoint = std::chrono::steady_clock::now();
+    auto pauseStartTime = startTimePoint;
 
     std::cout << "\n Started session for task: " << task.name << "\n"
               << " Controls: \033[2m Pause\033[36m[P]\033[m, \033[2m Stop\033[36m[X]\033[m\n";
@@ -725,8 +729,9 @@ void start_session_menu(Entry& task) {
     std::thread timerThread([&]() {
         while (running) {
             if (!paused) {
-                auto currentTime = std::chrono::steady_clock::now();
-                int elapsedSeconds = std::chrono::duration_cast<std::chrono::seconds>(currentTime - startTime).count() - pausedSeconds;
+                auto elapsedSeconds = std::chrono::duration_cast<std::chrono::seconds>(
+                                          std::chrono::steady_clock::now() - startTimePoint)
+                                          .count() - pausedSeconds;
                 int hours = elapsedSeconds / 3600;
                 int minutes = (elapsedSeconds / 60) % 60;
                 int seconds = elapsedSeconds % 60;
@@ -755,12 +760,12 @@ void start_session_menu(Entry& task) {
             case 'C': case 'c':
                 if (paused) {
                     paused = false;
-                    auto pauseEndTime = std::chrono::steady_clock::now();
-                    pausedSeconds += std::chrono::duration_cast<std::chrono::seconds>(pauseEndTime - pauseStartTime).count();
-
-                    cout << "\033[4A\033[0J";
-                }else{
-                    cout << "\033[1A\033[0J";
+                    pausedSeconds += std::chrono::duration_cast<std::chrono::seconds>(
+                                         std::chrono::steady_clock::now() - pauseStartTime)
+                                         .count();
+                    std::cout << "\033[4A\033[0J";
+                } else {
+                    std::cout << "\033[1A\033[0J";
                 }
                 break;
             case 'X': case 'x':
@@ -768,19 +773,14 @@ void start_session_menu(Entry& task) {
                 break;
             default:
                 std::cout << "\n Invalid command. Use [P] to pause, [C] to continue, [X] to stop.\n";
-                cout << "\033[4A\033[0J";
+                std::cout << "\033[4A\033[0J";
         }
     }
 
     timerThread.join();
 
-    // Get end time in the same format
-    now = std::chrono::system_clock::now();
-    nowTimeT = std::chrono::system_clock::to_time_t(now);
-    
-    std::ostringstream endTimeStream;
-    endTimeStream << std::put_time(std::localtime(&nowTimeT), "%Y-%m-%d, %H:%M:%S");
-    std::string endTimeSystem = endTimeStream.str();
+    // Get end time
+    int endTime = get_current_time();
 
     // Prompt user for a comment
     std::string comment;
@@ -791,12 +791,9 @@ void start_session_menu(Entry& task) {
     comment.erase(comment.find_last_not_of(" \t\n\r\f\v") + 1);
     comment.erase(0, comment.find_first_not_of(" \t\n\r\f\v"));
 
-    // Create session struct
-    Session session(0, task.id, startTimeSystem, endTimeSystem, pausedSeconds, comment);
-
     // Insert session into the database
     std::string query = "INSERT INTO Sessions (taskID, startTime, endTime, pausedTime, comment) VALUES (?, ?, ?, ?, ?);";
-    Database::insert_data(query, {task.id, session.startTime, session.endTime, session.pausedTime, comment});
+    Database::insert_data(query, {task.id, startTime, endTime, pausedSeconds, comment});
 }
 
 void task_menu(int ID){
