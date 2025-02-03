@@ -7,7 +7,7 @@
 # Pictures
   Main menu:
 
-  ![image](https://github.com/user-attachments/assets/9621cbf8-7d95-4fda-9588-91856f402671)
+  ![image](https://github.com/user-attachments/assets/e9a827fa-ecd6-4d94-ae5b-ff256ceaa120)
 
   Projects menu:
 
